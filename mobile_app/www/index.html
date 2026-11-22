@@ -3,27 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0F172A">
+<meta name="theme-color" content="#0B0D12">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" type="image/png" href="icon.png">
 <link rel="manifest" href="manifest.json">
 <title>Model MI • Kasa</title>
 <style>
   :root {
-    --bg: #0B1120;
-    --bg-grad: radial-gradient(circle at 15% 10%, rgba(56, 189, 248, 0.12), transparent 45%),
-               radial-gradient(circle at 85% 90%, rgba(167, 139, 250, 0.10), transparent 45%);
-    --glass: rgba(30, 41, 59, 0.78);
-    --glass-strong: rgba(15, 23, 42, 0.92);
-    --border: rgba(255, 255, 255, 0.09);
-    --border-hi: rgba(56, 189, 248, 0.45);
-    --text: #F8FAFC;
-    --muted: #94A3B8;
-    --sky: #38BDF8;
+    --bg: #0B0D12;
+    --bg-grad: radial-gradient(circle at 18% 8%, rgba(255, 179, 0, 0.06), transparent 42%),
+               radial-gradient(circle at 82% 92%, rgba(255, 255, 255, 0.03), transparent 45%);
+    --panel: rgba(20, 23, 32, 0.86);
+    --card: rgba(27, 31, 43, 0.90);
+    --card-hi: rgba(36, 41, 56, 0.96);
+    --text: #F4F5F7;
+    --muted: #8E95A5;
+    --amber: #FFB300;
     --green: #22C55E;
-    --amber: #F59E0B;
     --red: #EF4444;
-    --purple: #A78BFA;
+    --glow: 0 6px 22px rgba(0, 0, 0, 0.50), 0 0 1px rgba(255, 255, 255, 0.08);
+    --glow-amber: 0 0 18px rgba(255, 179, 0, 0.24), 0 4px 16px rgba(0, 0, 0, 0.45);
+    --glow-green: 0 0 18px rgba(34, 197, 94, 0.24), 0 4px 16px rgba(0, 0, 0, 0.45);
+    --glow-red: 0 0 16px rgba(239, 68, 68, 0.22), 0 4px 14px rgba(0, 0, 0, 0.45);
     --radius: 14px;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -39,52 +41,53 @@
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
   }
-  /* Top Glass Bar */
+  /* Top Glass Bar — Model MI ambient glow */
   .topbar {
     display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    padding: 10px 14px;
-    background: var(--glass-strong);
-    border-bottom: 1px solid var(--border);
+    padding: 9px 14px;
+    background: rgba(14, 17, 24, 0.92);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.55);
     backdrop-filter: blur(14px);
-    flex-shrink: 0;
+    flex-shrink: 0; z-index: 10;
   }
   .brand { display: flex; align-items: center; gap: 9px; font-weight: 800; font-size: 16px; letter-spacing: 0.2px; }
-  .brand-dot {
-    width: 28px; height: 28px; border-radius: 9px;
-    background: linear-gradient(135deg, #38BDF8, #6366F1);
-    display: grid; place-items: center; font-size: 14px; font-weight: 900; color: #0B1120;
-    box-shadow: 0 4px 14px rgba(56, 189, 248, 0.35);
+  .brand-icon {
+    width: 30px; height: 30px; border-radius: 9px; object-fit: cover;
+    box-shadow: 0 0 14px rgba(255, 179, 0, 0.25);
   }
   .top-right { display: flex; align-items: center; gap: 8px; }
   .status-pill {
     display: inline-flex; align-items: center; gap: 6px;
-    padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 700;
-    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border);
-    cursor: pointer;
+    padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+    background: var(--card); border: none;
+    box-shadow: var(--glow); cursor: pointer;
   }
-  .status-pill.cloud { color: #4ADE80; border-color: rgba(34, 197, 94, 0.4); background: rgba(34, 197, 94, 0.12); }
-  .status-pill.lan { color: #38BDF8; border-color: rgba(56, 189, 248, 0.4); background: rgba(56, 189, 248, 0.12); }
-  .status-pill.off { color: #FCA5A5; border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.14); }
+  .status-pill.cloud { color: #4ADE80; box-shadow: 0 0 14px rgba(34, 197, 94, 0.28); }
+  .status-pill.lan { color: var(--amber); box-shadow: 0 0 14px rgba(255, 179, 0, 0.28); }
+  .status-pill.off { color: #FCA5A5; box-shadow: 0 0 14px rgba(239, 68, 68, 0.28); }
   .icon-btn {
-    width: 36px; height: 36px; border-radius: 10px;
-    background: rgba(255, 255, 255, 0.06); border: 1px solid var(--border);
-    color: var(--text); font-size: 17px; display: grid; place-items: center; cursor: pointer;
+    width: 36px; height: 36px; border-radius: 10px; border: none;
+    background: var(--card); color: var(--text); font-size: 16px;
+    display: grid; place-items: center; cursor: pointer; box-shadow: var(--glow);
   }
   .icon-btn:active { transform: scale(0.95); }
 
   /* Tabs */
   .tabs {
-    display: flex; gap: 6px; padding: 8px 12px;
-    background: rgba(15, 23, 42, 0.65); border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
+    display: flex; gap: 7px; padding: 8px 12px;
+    background: rgba(14, 17, 24, 0.72);
+    flex-shrink: 0; overflow-x: auto; scrollbar-width: none;
   }
+  .tabs::-webkit-scrollbar { display: none; }
   .tab-btn {
-    flex: 1; padding: 9px 10px; border-radius: 10px; border: 1px solid transparent;
-    background: transparent; color: var(--muted); font-size: 13px; font-weight: 700;
-    cursor: pointer; transition: 0.15s;
+    flex: 1; min-width: 82px; padding: 9px 10px; border-radius: 11px; border: none;
+    background: var(--panel); color: var(--muted); font-size: 12.5px; font-weight: 700;
+    cursor: pointer; transition: 0.15s; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+    white-space: nowrap;
   }
   .tab-btn.active {
-    background: rgba(56, 189, 248, 0.15); border-color: var(--border-hi); color: var(--sky);
+    background: rgba(255, 179, 0, 0.14); color: var(--amber);
+    box-shadow: var(--glow-amber);
   }
 
   /* Main Views */
@@ -92,130 +95,172 @@
   .view { display: none; height: 100%; overflow: hidden; }
   .view.active { display: flex; }
 
-  /* POS Layout (Responsive Phone / Tablet) */
+  /* POS Layout */
   .pos-wrap { flex: 1; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; }
   @media (min-width: 820px) {
     .pos-wrap { flex-direction: row; }
   }
   .menu-pane {
-    flex: 1.4; display: flex; flex-direction: column; overflow: hidden; padding: 10px 12px 6px;
+    flex: 1.45; display: flex; flex-direction: column; overflow: hidden; padding: 10px 12px 6px;
   }
   .search-row { display: flex; gap: 8px; margin-bottom: 8px; }
-  .inp {
-    width: 100%; padding: 10px 12px; border-radius: 10px;
-    background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border);
-    color: var(--text); font-size: 14px; outline: none;
+  .inp, select {
+    width: 100%; padding: 10px 12px; border-radius: 10px; border: none;
+    background: rgba(11, 13, 18, 0.92); color: var(--text); font-size: 14px; outline: none;
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.6), 0 0 1px rgba(255,255,255,0.08);
   }
-  .inp:focus { border-color: var(--sky); }
+  .inp:focus, select:focus { box-shadow: 0 0 14px rgba(255, 179, 0, 0.25); }
   .cats {
-    display: flex; gap: 6px; overflow-x: auto; padding-bottom: 8px; flex-shrink: 0;
+    display: flex; gap: 7px; overflow-x: auto; padding: 2px 2px 9px; flex-shrink: 0;
     scrollbar-width: none;
   }
   .cats::-webkit-scrollbar { display: none; }
   .cat-chip {
-    padding: 7px 13px; border-radius: 999px; white-space: nowrap;
-    background: var(--glass); border: 1px solid var(--border);
-    color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer;
+    padding: 7px 13px; border-radius: 999px; white-space: nowrap; border: none;
+    background: var(--card); color: var(--muted); font-size: 12px; font-weight: 700;
+    cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,0.38);
   }
-  .cat-chip.active { background: rgba(56, 189, 248, 0.18); border-color: var(--sky); color: var(--sky); }
+  .cat-chip.active {
+    background: rgba(255, 179, 0, 0.16); color: var(--amber);
+    box-shadow: var(--glow-amber);
+  }
 
   .menu-grid {
     flex: 1; overflow-y: auto; display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
-    gap: 9px; align-content: start; padding-bottom: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px; align-content: start; padding: 3px 2px 14px;
   }
   .dish-card {
-    background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 11px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px;
-    cursor: pointer; transition: transform 0.1s, border-color 0.15s; min-height: 92px;
+    background: var(--card); border: none; border-radius: var(--radius);
+    padding: 11px; display: flex; flex-direction: column; justify-content: space-between; gap: 7px;
+    cursor: pointer; transition: transform 0.1s, box-shadow 0.15s; min-height: 98px;
+    box-shadow: var(--glow); position: relative;
   }
-  .dish-card:active { transform: scale(0.97); border-color: var(--sky); }
-  .dish-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; }
+  .dish-card:active { transform: scale(0.97); background: var(--card-hi); box-shadow: var(--glow-amber); }
+  .dish-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 5px; }
   .dish-name { font-size: 13px; font-weight: 700; line-height: 1.25; }
-  .dish-cat { font-size: 11px; color: var(--muted); }
-  .dish-price { font-size: 14px; font-weight: 800; color: var(--sky); }
-  .promo-tag {
-    font-size: 10px; font-weight: 800; padding: 2px 6px; border-radius: 6px;
-    background: rgba(245, 158, 11, 0.2); color: var(--amber); border: 1px solid rgba(245, 158, 11, 0.4);
-    white-space: nowrap;
+  .zone-badge {
+    font-size: 13px; font-weight: 900; padding: 0 2px;
+    background: transparent; border: none; box-shadow: none; letter-spacing: 0.4px; white-space: nowrap;
   }
+  .promo-btn {
+    font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 6px; border: none;
+    background: rgba(255, 179, 0, 0.16); color: var(--amber); cursor: pointer;
+    box-shadow: 0 0 10px rgba(255, 179, 0, 0.22);
+  }
+  .dish-price { font-size: 14px; font-weight: 800; color: var(--amber); }
 
   /* Cart Pane */
   .cart-pane {
-    background: var(--glass-strong); border-top: 1px solid var(--border);
+    background: var(--panel);
+    box-shadow: 0 -6px 28px rgba(0, 0, 0, 0.65);
     display: flex; flex-direction: column; padding: 10px 12px;
-    max-height: 46dvh; flex-shrink: 0;
+    max-height: 48dvh; flex-shrink: 0;
   }
   @media (min-width: 820px) {
     .cart-pane {
-      width: 360px; max-height: 100%; border-top: none; border-left: 1px solid var(--border);
+      width: 375px; max-height: 100%;
+      box-shadow: -6px 0 28px rgba(0, 0, 0, 0.65);
     }
   }
   .cart-head {
-    display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;
-    font-size: 13px; font-weight: 800; color: var(--muted);
+    display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;
+    font-size: 13px; font-weight: 800; color: var(--muted); gap: 8px;
   }
-  .cart-items { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+  .cart-items { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 7px; margin-bottom: 8px; padding: 2px; }
   .cart-row {
-    display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border);
-    border-radius: 10px; padding: 7px 10px;
-  }
-  .cart-info { flex: 1; min-width: 0; }
-  .cart-title { font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cart-sub { font-size: 11px; color: var(--amber); }
-  .qty-ctrl { display: flex; align-items: center; gap: 6px; }
-  .q-btn {
-    width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border);
-    background: rgba(255, 255, 255, 0.08); color: var(--text); font-size: 15px; font-weight: 800; cursor: pointer;
-  }
-  .pay-row { display: flex; gap: 7px; margin-top: 6px; }
-  .btn {
-    border: none; border-radius: 11px; padding: 11px 12px; font-size: 13px; font-weight: 800;
-    cursor: pointer; color: #fff; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
-  }
-  .btn:active { transform: scale(0.97); }
-  .btn-green { background: linear-gradient(135deg, #16A34A, #22C55E); flex: 1.2; }
-  .btn-amber { background: linear-gradient(135deg, #D97706, #F59E0B); color: #0B1120; flex: 1; }
-  .btn-red { background: rgba(239, 68, 68, 0.18); border: 1px solid rgba(239, 68, 68, 0.45); color: #FCA5A5; }
-  .btn-sky { background: linear-gradient(135deg, #0284C7, #38BDF8); color: #0B1120; }
-  .btn-ghost { background: rgba(255, 255, 255, 0.07); border: 1px solid var(--border); color: var(--text); }
-
-  /* Receipts & KDS Lists */
-  .list-pane { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 9px; }
-  .glass-card {
-    background: var(--glass); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 12px; display: flex; flex-direction: column; gap: 6px;
+    display: flex; flex-direction: column; gap: 6px;
+    background: var(--card); border: none; border-radius: 11px; padding: 8px 10px;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
   }
   .row-between { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .qty-ctrl { display: flex; align-items: center; gap: 6px; }
+  .q-btn {
+    width: 28px; height: 28px; border-radius: 8px; border: none;
+    background: rgba(255, 255, 255, 0.08); color: var(--text); font-size: 15px; font-weight: 800;
+    cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+  }
+  .mod-badge {
+    display: inline-block; font-size: 10.5px; font-weight: 700; padding: 2px 6px; border-radius: 6px;
+    margin: 2px 3px 0 0;
+  }
+  .mb-no { background: rgba(239, 68, 68, 0.16); color: #FCA5A5; }
+  .mb-rep { background: rgba(255, 179, 0, 0.16); color: #FCD34D; }
+  .mb-add { background: rgba(34, 197, 94, 0.16); color: #86EFAC; }
+  .mb-disc { background: rgba(171, 71, 188, 0.22); color: #E9D5FF; }
+
+  .pay-row { display: flex; gap: 7px; margin-top: 6px; }
+  .btn {
+    border: none; border-radius: 11px; padding: 10px 12px; font-size: 13px; font-weight: 800;
+    cursor: pointer; color: var(--text); background: var(--card);
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    box-shadow: var(--glow);
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn-green { background: linear-gradient(135deg, #16A34A, #22C55E); color: #fff; flex: 1.2; box-shadow: var(--glow-green); }
+  .btn-amber { background: linear-gradient(135deg, #E69500, #FFB300); color: #0B0D12; flex: 1; box-shadow: var(--glow-amber); }
+  .btn-red { background: rgba(239, 68, 68, 0.18); color: #FCA5A5; box-shadow: var(--glow-red); }
+  .btn-ghost { background: rgba(255, 255, 255, 0.06); color: var(--text); }
+
+  /* PLU Keypad */
+  .plu-wrap { flex: 1; padding: 12px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; max-width: 520px; margin: 0 auto; width: 100%; }
+  .plu-screen {
+    background: #07120B; border-radius: 12px; padding: 14px;
+    font-family: 'Consolas', monospace; color: #4ADE80;
+    box-shadow: 0 0 18px rgba(34, 197, 94, 0.18), inset 0 2px 10px rgba(0,0,0,0.7);
+  }
+  .plu-big { font-size: 26px; font-weight: 800; letter-spacing: 1px; }
+  .plu-sub { font-size: 12.5px; color: #86EFAC; margin-top: 4px; min-height: 18px; }
+  .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .key {
+    padding: 16px 8px; border-radius: 11px; border: none;
+    background: var(--card); color: var(--text); font-size: 19px; font-weight: 800;
+    cursor: pointer; box-shadow: var(--glow);
+  }
+  .key:active { background: var(--card-hi); box-shadow: var(--glow-amber); }
+  .key-op { color: var(--amber); font-size: 16px; }
+  .key-enter { background: #16A34A; color: #fff; font-size: 15px; box-shadow: var(--glow-green); }
+  .key-clr { background: rgba(239,68,68,0.2); color: #FCA5A5; font-size: 15px; box-shadow: var(--glow-red); }
+
+  /* Lists (Receipts & KDS) */
+  .list-pane { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .glass-card {
+    background: var(--card); border: none; border-radius: var(--radius);
+    padding: 12px; display: flex; flex-direction: column; gap: 6px;
+    box-shadow: var(--glow);
+  }
 
   /* Modals */
   .modal-bg {
-    position: fixed; inset: 0; background: rgba(2, 6, 23, 0.78); backdrop-filter: blur(8px);
-    display: none; align-items: center; justify-content: center; padding: 16px; z-index: 50;
+    position: fixed; inset: 0; background: rgba(5, 7, 11, 0.80); backdrop-filter: blur(8px);
+    display: none; align-items: center; justify-content: center; padding: 14px; z-index: 50;
   }
   .modal-bg.open { display: flex; }
   .modal {
-    width: 100%; max-width: 440px; max-height: 88dvh; overflow-y: auto;
-    background: #111827; border: 1px solid var(--border); border-radius: 16px;
+    width: 100%; max-width: 470px; max-height: 90dvh; overflow-y: auto;
+    background: #141822; border: none; border-radius: 16px;
     padding: 16px; display: flex; flex-direction: column; gap: 11px;
-    box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+    box-shadow: 0 0 40px rgba(0,0,0,0.85), 0 0 1px rgba(255,255,255,0.12);
   }
-  .modal h3 { margin: 0; font-size: 16px; }
+  .modal h3 { margin: 0; font-size: 16px; color: var(--amber); }
+  .mod-sec {
+    background: rgba(255,255,255,0.03); border-radius: 12px; padding: 10px;
+    display: flex; flex-direction: column; gap: 7px; box-shadow: inset 0 0 1px rgba(255,255,255,0.06);
+  }
+  .mod-sec-title { font-size: 12px; font-weight: 800; color: var(--muted); }
+  .chip-wrap { display: flex; flex-wrap: wrap; gap: 6px; }
+  .ing-chip {
+    padding: 6px 10px; border-radius: 8px; border: none; font-size: 12px; font-weight: 700;
+    background: var(--card); color: var(--text); cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  }
+  .ing-chip.on { background: rgba(239, 68, 68, 0.22); color: #FCA5A5; box-shadow: var(--glow-red); }
   .field-lbl { font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 4px; display: block; }
-  .mod-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-  .mod-chip {
-    padding: 6px 10px; border-radius: 8px; font-size: 12px; font-weight: 700;
-    background: rgba(255,255,255,0.06); border: 1px solid var(--border); color: var(--text); cursor: pointer;
-  }
-  .mod-chip.sel { background: rgba(56, 189, 248, 0.2); border-color: var(--sky); color: var(--sky); }
 
-  /* Toast */
   .toast {
     position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
-    background: #1E293B; border: 1px solid var(--sky); color: var(--text);
+    background: #181C27; color: var(--text);
     padding: 10px 16px; border-radius: 12px; font-size: 13px; font-weight: 700;
-    z-index: 100; display: none; box-shadow: 0 10px 30px rgba(0,0,0,0.5); max-width: 92vw; text-align: center;
+    z-index: 100; display: none; box-shadow: var(--glow-amber); max-width: 92vw; text-align: center;
   }
 </style>
 </head>
@@ -223,8 +268,8 @@
 <div class="app">
   <div class="topbar">
     <div class="brand">
-      <div class="brand-dot">MI</div>
-      <div>Model MI <span style="color:var(--sky);font-weight:600;font-size:13px;">Kasa</span></div>
+      <img src="icon.png" class="brand-icon" alt="MI" onerror="this.style.display='none'">
+      <div>Model MI <span style="color:var(--amber);font-weight:700;font-size:13px;">Kasa</span></div>
     </div>
     <div class="top-right">
       <div id="statusPill" class="status-pill off" onclick="checkConnections(true)">⏳ Tikrinama...</div>
@@ -233,19 +278,19 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('pos', this)">💳 Kasa</button>
+    <button class="tab-btn active" onclick="switchTab('pos', this)">💳 Touch Kasa</button>
     <button class="tab-btn" onclick="switchTab('receipts', this)">🧾 Čekiai (<span id="recCnt">0</span>)</button>
     <button class="tab-btn" onclick="switchTab('kds', this)">🍳 Gamyba (<span id="kdsCnt">0</span>)</button>
   </div>
 
   <div class="views">
-    <!-- KASA -->
+    <!-- TOUCH KASA -->
     <div id="view-pos" class="view active">
       <div class="pos-wrap">
         <div class="menu-pane">
           <div class="search-row">
             <input id="inpSearch" class="inp" placeholder="🔍 Ieškoti patiekalo arba PLU..." oninput="renderMenu()">
-            <button class="icon-btn" title="Atnaujinti meniu" onclick="syncRemoteData()">🔄</button>
+            <button class="icon-btn" title="Atnaujinti iš Model MI" onclick="syncRemoteData(true)">🔄</button>
           </div>
           <div id="catsRow" class="cats"></div>
           <div id="menuGrid" class="menu-grid"></div>
@@ -254,7 +299,10 @@
         <div class="cart-pane">
           <div class="cart-head">
             <span>KREPŠELIS</span>
-            <span id="cartTotal" style="color:var(--sky);font-size:16px;">0.00 €</span>
+            <div style="display:flex;align-items:center;gap:8px;">
+              <input id="inpOrderDisc" type="number" min="0" max="100" step="5" placeholder="Nuol. %" style="width:74px;padding:4px 7px;font-size:12px;" class="inp" oninput="renderCart()">
+              <span id="cartTotal" style="color:var(--amber);font-size:16px;">0.00 €</span>
+            </div>
           </div>
           <div id="cartItems" class="cart-items"></div>
           <input id="inpNote" class="inp" style="padding:8px 10px;font-size:13px;" placeholder="📝 Bendras komentaras virtuvei...">
@@ -268,7 +316,11 @@
     </div>
 
     <!-- ČEKIAI -->
-    <div id="view-receipts" class="view">
+    <div id="view-receipts" class="view" style="flex-direction:column;">
+      <div class="row-between" style="padding:10px 12px 0;flex-shrink:0;">
+        <span style="font-size:12.5px;font-weight:800;color:var(--muted);">IŠSIŲSTI ČEKIAI</span>
+        <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="clearInactiveReceipts()">🧹 Išvalyti neaktyvius</button>
+      </div>
       <div id="receiptsList" class="list-pane"></div>
     </div>
 
@@ -279,40 +331,102 @@
   </div>
 </div>
 
-<!-- MODIFIKATORIŲ MODALAS -->
-<div id="modModal" class="modal-bg">
+<!-- MODIFIKATORIŲ IR NUOLAIDOS MODALAS -->
+<div id="modModal" class="modal-bg" onclick="if(event.target===this)closeModModal()">
   <div class="modal">
-    <h3 id="modTitle">Patiekalas</h3>
-    <div>
-      <span class="field-lbl">Kiekis</span>
-      <div class="qty-ctrl">
-        <button class="q-btn" onclick="adjModQty(-1)">−</button>
-        <b id="modQty" style="min-width:28px;text-align:center;">1</b>
-        <button class="q-btn" onclick="adjModQty(1)">+</button>
+    <div class="row-between">
+      <h3 id="modTitle">⚙️ Modifikatoriai</h3>
+      <button class="btn" style="padding:6px 10px;" onclick="closeModModal()">✕</button>
+    </div>
+    <div id="modSub" style="font-size:12px;color:var(--muted);"></div>
+
+    <div class="mod-sec">
+      <div class="mod-sec-title">🚫 Be ingrediento (iš receptūros)</div>
+      <div id="modIngChips" class="chip-wrap"></div>
+      <div class="pay-row" style="margin-top:2px;">
+        <input id="inpCustomNo" class="inp" placeholder="Arba įrašykite: Be ...">
+        <button class="btn btn-red" onclick="addCustomNo()">+ Be</button>
       </div>
     </div>
-    <div>
-      <span class="field-lbl">Greiti pakeitimai</span>
-      <div id="modChips" class="mod-chips"></div>
+
+    <div class="mod-sec">
+      <div class="mod-sec-title">🔄 Pakeisti ingredientą</div>
+      <div class="pay-row" style="margin-top:0;">
+        <select id="selRepOrig"></select>
+        <span style="color:var(--muted);font-weight:800;align-self:center;">→</span>
+        <select id="selRepNew"></select>
+      </div>
+      <button class="btn btn-amber" style="width:100%;margin-top:2px;" onclick="addReplaceMod()">🔄 Pakeisti</button>
+      <div id="modRepList" class="chip-wrap"></div>
     </div>
-    <div>
-      <span class="field-lbl">Pastaba virtuvei</span>
-      <input id="modNote" class="inp" placeholder="Pvz.: Be svogūnų, aštriau...">
+
+    <div class="mod-sec">
+      <div class="mod-sec-title">➕ Priedas (iš Model MI sandėlio arba laisvas)</div>
+      <input id="inpSandFilter" class="inp" placeholder="Ieškoti sandėlio produkto..." oninput="renderSandelisSelect()">
+      <div class="pay-row" style="margin-top:0;">
+        <select id="selSandAddon" style="flex:2;" onchange="onSelectSandAddon()"></select>
+        <input id="inpAddonQty" class="inp" type="number" step="1" min="1" value="10" placeholder="Kiekis" style="max-width:78px;" oninput="recalcAddonPrice()">
+        <span id="lblAddonUnit" style="align-self:center;font-size:12.5px;font-weight:800;color:var(--amber);min-width:24px;">g</span>
+        <input id="inpAddonPrice" class="inp" type="number" step="0.01" value="0.00" placeholder="€" style="max-width:75px;">
+      </div>
+      <div class="pay-row" style="margin-top:2px;">
+        <input id="inpAddonCustom" class="inp" placeholder="Arba laisvas pav. (pvz. Ext. Sūr.)">
+        <button class="btn btn-green" style="flex:0 0 auto;" onclick="addAddonMod()">+ Priedas</button>
+      </div>
+      <div id="modAddList" class="chip-wrap"></div>
+    </div>
+
+    <div class="mod-sec">
+      <div class="mod-sec-title">🏷️ Akcija / Nuolaida šiam patiekalui</div>
+      <div class="chip-wrap">
+        <button class="cat-chip" onclick="setItemDisc(0)">0%</button>
+        <button class="cat-chip" onclick="setItemDisc(10)">-10%</button>
+        <button class="cat-chip" onclick="setItemDisc(20)">-20%</button>
+        <button class="cat-chip" onclick="setItemDisc(50)">-50%</button>
+      </div>
+      <div class="pay-row" style="margin-top:2px;">
+        <input id="inpItemDisc" class="inp" type="number" min="0" max="100" step="5" placeholder="%" style="max-width:85px;">
+        <input id="inpItemPromo" class="inp" placeholder="Akcijos pavadinimas">
+      </div>
+    </div>
+
+    <button class="btn btn-amber" style="padding:12px;font-size:14px;" onclick="saveModModal()">✅ Išsaugoti ir uždaryti</button>
+  </div>
+</div>
+
+<!-- PATIEKALO AKCIJOS MODALAS -->
+<div id="tilePromoModal" class="modal-bg" onclick="if(event.target===this)closeTilePromo()">
+  <div class="modal" style="max-width:380px;">
+    <div class="row-between">
+      <h3 id="tpTitle">🏷️ Patiekalo akcija (Model MI)</h3>
+      <button class="btn" style="padding:6px 10px;" onclick="closeTilePromo()">✕</button>
+    </div>
+    <div id="tpStatus" style="font-size:12.5px;color:var(--muted);"></div>
+    <div class="chip-wrap">
+      <button class="cat-chip" onclick="applyTilePromo(10)">-10%</button>
+      <button class="cat-chip" onclick="applyTilePromo(15)">-15%</button>
+      <button class="cat-chip" onclick="applyTilePromo(20)">-20%</button>
+      <button class="cat-chip" onclick="applyTilePromo(30)">-30%</button>
+      <button class="cat-chip" onclick="applyTilePromo(50)">-50%</button>
     </div>
     <div class="pay-row">
-      <button class="btn btn-ghost" style="flex:1;" onclick="closeModModal()">Atšaukti</button>
-      <button class="btn btn-sky" style="flex:1.4;" onclick="confirmAddDish()">➕ Į krepšelį</button>
+      <input id="inpTpProc" class="inp" type="number" min="0" max="100" step="5" placeholder="Nuolaida %">
+      <button class="btn btn-amber" onclick="applyTilePromo(Number(document.getElementById('inpTpProc').value||0))">✅ Taikyti %</button>
     </div>
+    <button class="btn btn-red" onclick="applyTilePromo(0)">❌ Nuimti akciją</button>
   </div>
 </div>
 
 <!-- NUSTATYMŲ MODALAS -->
-<div id="cfgModal" class="modal-bg">
+<div id="cfgModal" class="modal-bg" onclick="if(event.target===this)closeSettings()">
   <div class="modal">
-    <h3>⚙️ Model MI Ryšio Nustatymai</h3>
+    <div class="row-between">
+      <h3>⚙️ Model MI Ryšio Nustatymai</h3>
+      <button class="btn" style="padding:6px 10px;" onclick="closeSettings()">✕</button>
+    </div>
     <div>
       <span class="field-lbl">Ryšio režimas</span>
-      <select id="cfgMode" class="inp">
+      <select id="cfgMode">
         <option value="auto">Automatinis: Cloud → LAN (Rekomenduojama)</option>
         <option value="cloud">Tik Cloud</option>
         <option value="lan">Tik LAN</option>
@@ -324,19 +438,18 @@
     </div>
     <div>
       <span class="field-lbl">🏠 LAN Model MI adresas (Vietinis Wi-Fi)</span>
-      <input id="cfgLan" class="inp" placeholder="http://192.168.0.102:8088">
+      <input id="cfgLan" class="inp" placeholder="http://192.168.0.103:8088">
     </div>
     <div>
-      <span class="field-lbl">🔑 API Raktas (jei naudojamas)</span>
+      <span class="field-lbl">🔑 API Raktas (neprivaloma)</span>
       <input id="cfgKey" class="inp" placeholder="(neprivaloma)">
     </div>
-    <div id="diagBox" style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.04);padding:9px;border-radius:10px;">
-      Paspauskite „Patikrinti ryšį“, kad pamatytumėte Cloud ir LAN būseną.
+    <div id="diagBox" style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;">
+      Paspauskite „Patikrinti“, kad matytumėte Cloud ir LAN būseną.
     </div>
     <div class="pay-row">
       <button class="btn btn-ghost" style="flex:1;" onclick="testDiag()">📡 Patikrinti</button>
-      <button class="btn btn-sky" style="flex:1;" onclick="saveSettings()">💾 Išsaugoti</button>
-      <button class="btn btn-ghost" onclick="closeSettings()">✖</button>
+      <button class="btn btn-amber" style="flex:1;" onclick="saveSettings()">💾 Išsaugoti</button>
     </div>
   </div>
 </div>
@@ -344,40 +457,60 @@
 <div id="toast" class="toast"></div>
 
 <script>
+const ZONOS = {
+  s: {pav: "Šalti", kodas: "S", spalva: "#4CAF50"},
+  v: {pav: "Viryklė", kodas: "V", spalva: "#FFEE58"},
+  g: {pav: "Grill", kodas: "G", spalva: "#FF5252"},
+  k: {pav: "Konvekcinė", kodas: "K", spalva: "#FF9800"},
+  p: {pav: "Picų", kodas: "P", spalva: "#AB47BC"},
+  f: {pav: "Fri", kodas: "F", spalva: "#D4A373"},
+  baras: {pav: "Baras", kodas: "B", spalva: "#38BDF8"},
+  dienos: {pav: "Dienos", kodas: "D", spalva: "#FBBF24"},
+  virtuve: {pav: "Virtuvė", kodas: "VR", spalva: "#E2E8F0"},
+  kita: {pav: "Kita", kodas: "KT", spalva: "#8E8E93"}
+};
+
 const DEFAULT_MENU = [
-  {plu:"101", pavadinimas:"Jautienos mėsainis su čederio sūriu", kategorija:"Karštieji", kaina:9.50},
-  {plu:"102", pavadinimas:"Traškūs vištienos kepsneliai (paniruoti)", kategorija:"Karštieji", kaina:8.20},
-  {plu:"103", pavadinimas:"Keptos tigrinės krevetės su česnaku", kategorija:"Karštieji", kaina:12.90},
-  {plu:"104", pavadinimas:"Kiaulienos sprandinės kepsnys", kategorija:"Karštieji", kaina:11.50},
-  {plu:"201", pavadinimas:"Cezario salotos su vištiena", kategorija:"Salotos", kaina:8.50},
-  {plu:"202", pavadinimas:"Graikiškos salotos su fetos sūriu", kategorija:"Salotos", kaina:7.40},
-  {plu:"301", pavadinimas:"Šaltibarščiai su bulvėmis", kategorija:"Sriubos", kaina:4.90},
-  {plu:"401", pavadinimas:"Limonadas namų gamybos", kategorija:"Gėrimai", kaina:3.50}
+  {plu:"101", pavadinimas:"Jautienos mėsainis su čederio sūriu", kat:"Karštieji", zona:"g", kaina:9.50, akcija_proc:0, ingredientai:["jautienos kumpis","mėsainio bandelė","čederio sūris","pomidorai","svogūnai"]},
+  {plu:"102", pavadinimas:"Traškūs vištienos kepsneliai (paniruoti)", kat:"Karštieji", zona:"f", kaina:8.20, akcija_proc:0, ingredientai:["vištienos krūtinėlė","džiūvėsėliai","paprika"]},
+  {plu:"103", pavadinimas:"Keptos tigrinės krevetės su česnaku", kat:"Karštieji", zona:"v", kaina:12.90, akcija_proc:0, ingredientai:["tigrinės krevetės","sviestas","česnakai","petražolės","citrina"]},
+  {plu:"104", pavadinimas:"Kiaulienos sprandinės kepsnys", kat:"Karštieji", zona:"g", kaina:11.50, akcija_proc:0, ingredientai:["kiaulienos sprandinė","bulvės","morkos"]},
+  {plu:"201", pavadinimas:"Cezario salotos su vištiena", kat:"Salotos", zona:"s", kaina:8.50, akcija_proc:0, ingredientai:["romaninės salotos","vištienos krūtinėlė","parmezano sūris","cezario padažas"]},
+  {plu:"202", pavadinimas:"Graikiškos salotos su fetos sūriu", kat:"Salotos", zona:"s", kaina:7.40, akcija_proc:0, ingredientai:["agurkai","pomidorai","marinuotos alyvuogės","svogūnai"]},
+  {plu:"301", pavadinimas:"Limonadas namų gamybos", kat:"Baras", zona:"baras", kaina:3.50, akcija_proc:0, ingredientai:["citrina","cukrus"]}
 ];
 
-const QUICK_MODS = ["Be svogūnų", "Be sūrio", "Be padažo", "Aštriau", "Atskirai", "+ Sūris (+1.00€)", "+ Šoninė (+1.50€)"];
+const defaultLan = (location.protocol === "http:" && location.hostname && location.hostname !== "localhost")
+  ? location.origin
+  : (location.hostname === "127.0.0.1" ? "http://127.0.0.1:8088" : "http://192.168.0.103:8088");
 
 let cfg = JSON.parse(localStorage.getItem("mi_app_cfg") || "null") || {
   mode: "auto",
   cloudUrl: "https://testas-azgh.onrender.com",
-  lanUrl: "http://192.168.0.102:8088",
+  lanUrl: defaultLan,
   apiKey: ""
 };
 let menu = JSON.parse(localStorage.getItem("mi_app_menu") || "null") || DEFAULT_MENU;
+let sandelisItems = JSON.parse(localStorage.getItem("mi_app_sandelis") || "[]");
 let cart = [];
 let receipts = JSON.parse(localStorage.getItem("mi_app_rec") || "[]");
 let offlineQueue = JSON.parse(localStorage.getItem("mi_app_queue") || "[]");
 let activeCat = "Visi";
-let activeChannel = "off"; // 'cloud' | 'lan' | 'off'
-let modTarget = null;
-let modQty = 1;
-let modSelected = new Set();
+let activeChannel = "off";
+let pluBuf = "";
+let modIdx = -1;
+let modDraft = {neideti:[], pakeisti:[], priedai:[], nuolaida_proc:0, akcija:""};
+let tpIdx = -1;
 
 function cleanUrl(u) { return String(u || "").trim().replace(/\/+$/, ""); }
 function authHeaders() {
   const h = {"Content-Type": "application/json"};
   if (cfg.apiKey) { h["X-API-Key"] = cfg.apiKey; h["Authorization"] = "Bearer " + cfg.apiKey; }
   return h;
+}
+function getZoneMeta(z) {
+  const k = String(z || "kita").trim().toLowerCase();
+  return ZONOS[k] || {pav: k.toUpperCase(), kodas: k.slice(0,2).toUpperCase() || "KT", spalva: "#8E8E93"};
 }
 function nowParts() {
   const d = new Date();
@@ -389,7 +522,8 @@ function nowParts() {
 function toast(msg, err=false) {
   const t = document.getElementById("toast");
   t.textContent = msg;
-  t.style.borderColor = err ? "var(--red)" : "var(--sky)";
+  t.style.boxShadow = err ? "var(--glow-red)" : "var(--glow-amber)";
+  t.style.color = err ? "#FCA5A5" : "var(--text)";
   t.style.display = "block";
   clearTimeout(window._tt);
   window._tt = setTimeout(() => t.style.display = "none", 3200);
@@ -397,11 +531,8 @@ function toast(msg, err=false) {
 async function fetchTimeout(url, opts={}, ms=3200) {
   const ctrl = new AbortController();
   const id = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, {...opts, signal: ctrl.signal});
-  } finally {
-    clearTimeout(id);
-  }
+  try { return await fetch(url, {...opts, signal: ctrl.signal}); }
+  finally { clearTimeout(id); }
 }
 
 async function checkEndpoint(baseUrl, ms=2500) {
@@ -435,21 +566,16 @@ async function checkConnections(notify=false) {
   if (ch !== "off" && offlineQueue.length) flushQueue();
 }
 
-async function sendPayloadWithFailover(payload) {
+async function postWithFailover(path, payload) {
   const order = cfg.mode === "cloud" ? ["cloud"] : cfg.mode === "lan" ? ["lan"] : ["cloud", "lan"];
   for (const ch of order) {
     const base = cleanUrl(ch === "cloud" ? cfg.cloudUrl : cfg.lanUrl);
     if (!base) continue;
     try {
-      const res = await fetchTimeout(base + "/api/uzsakymas", {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify(payload)
+      const res = await fetchTimeout(base + path, {
+        method: "POST", headers: authHeaders(), body: JSON.stringify(payload)
       }, ch === "cloud" ? 4000 : 3000);
-      if (res.ok) {
-        activeChannel = ch;
-        return {ok: true, channel: ch};
-      }
+      if (res.ok) { activeChannel = ch; return {ok: true, channel: ch}; }
     } catch {}
   }
   return {ok: false, channel: "off"};
@@ -460,16 +586,12 @@ async function flushQueue() {
   const remaining = [];
   let sent = 0;
   for (const item of offlineQueue) {
-    const r = await sendPayloadWithFailover(item);
-    if (r.ok) sent++;
-    else remaining.push(item);
+    const r = await postWithFailover("/api/uzsakymas", item);
+    if (r.ok) sent++; else remaining.push(item);
   }
   offlineQueue = remaining;
   localStorage.setItem("mi_app_queue", JSON.stringify(offlineQueue));
-  if (sent) {
-    toast(`✅ Išsiųsta iš eilės: ${sent}`);
-    checkConnections(false);
-  }
+  if (sent) { toast(`✅ Išsiųsta iš eilės: ${sent}`); checkConnections(false); }
 }
 
 function switchTab(name, btn) {
@@ -482,117 +604,369 @@ function switchTab(name, btn) {
 
 function renderMenu() {
   const q = document.getElementById("inpSearch").value.trim().toLowerCase();
-  const cats = ["Visi", ...new Set(menu.map(m => m.kategorija || "Kita"))];
+  const cats = ["Visi", ...new Set(menu.map(m => m.kat || "Patiekalai"))];
   document.getElementById("catsRow").innerHTML = cats.map(c =>
     `<div class="cat-chip ${c===activeCat?'active':''}" onclick="activeCat='${c.replace(/'/g,"\\'")}';renderMenu()">${c}</div>`
   ).join("");
 
   const filtered = menu.filter(m =>
-    (activeCat === "Visi" || (m.kategorija || "Kita") === activeCat) &&
+    (activeCat === "Visi" || (m.kat || "Patiekalai") === activeCat) &&
     (!q || m.pavadinimas.toLowerCase().includes(q) || String(m.plu || "").toLowerCase().includes(q))
   );
-  document.getElementById("menuGrid").innerHTML = filtered.map((m, idx) => `
-    <div class="dish-card" onclick="openModModal(${menu.indexOf(m)})">
-      <div class="dish-top">
+
+  document.getElementById("menuGrid").innerHTML = filtered.map(m => {
+    const idx = menu.indexOf(m);
+    const zm = getZoneMeta(m.zona);
+    const akc = Number(m.akcija_proc || 0);
+    const kEff = akc > 0 ? Math.max(0, Number(m.kaina) * (1 - akc / 100)) : Number(m.kaina);
+    return `
+      <div class="dish-card" onclick="addToCart(menu[${idx}])">
+        <div class="dish-top">
+          <span class="zone-badge" style="color:${zm.spalva};text-shadow:0 0 10px ${zm.spalva}88;">${zm.kodas}</span>
+          <button class="promo-btn" onclick="event.stopPropagation();openTilePromo(${idx})">${akc>0 ? '-'+akc+'%' : '🏷️'}</button>
+        </div>
         <div class="dish-name">${m.pavadinimas}</div>
-        ${m.akcija ? `<span class="promo-tag">-${m.akcija}%</span>` : ""}
-      </div>
-      <div class="row-between">
-        <span class="dish-cat">${m.plu ? '#'+m.plu+' • ' : ''}${m.kategorija || ''}</span>
-        <span class="dish-price">${Number(m.kaina || 0).toFixed(2)} €</span>
-      </div>
-    </div>
-  `).join("") || `<div style="color:var(--muted);padding:12px;">Patiekalų nerasta.</div>`;
+        <div class="row-between">
+          <span style="font-size:11px;color:var(--muted);">${m.plu ? '#'+m.plu : ''}</span>
+          <span class="dish-price">${akc>0 ? `<s style="color:var(--muted);font-size:11px;">${Number(m.kaina).toFixed(2)}</s> ` : ''}${kEff.toFixed(2)} €</span>
+        </div>
+      </div>`;
+  }).join("") || `<div style="color:var(--muted);padding:12px;">Patiekalų nerasta.</div>`;
 }
 
-function openModModal(idx) {
-  modTarget = menu[idx];
-  modQty = 1;
-  modSelected = new Set();
-  document.getElementById("modTitle").textContent = modTarget.pavadinimas;
-  document.getElementById("modQty").textContent = "1";
-  document.getElementById("modNote").value = "";
-  renderModChips();
-  document.getElementById("modModal").classList.add("open");
-}
-function closeModModal() { document.getElementById("modModal").classList.remove("open"); }
-function adjModQty(d) { modQty = Math.max(1, modQty + d); document.getElementById("modQty").textContent = modQty; }
-function renderModChips() {
-  document.getElementById("modChips").innerHTML = QUICK_MODS.map(m =>
-    `<div class="mod-chip ${modSelected.has(m)?'sel':''}" onclick="toggleMod('${m}')">${m}</div>`
-  ).join("");
-}
-function toggleMod(m) {
-  if (modSelected.has(m)) modSelected.delete(m); else modSelected.add(m);
-  renderModChips();
-}
-function confirmAddDish() {
-  if (!modTarget) return;
-  const noteParts = [...modSelected];
-  const freeNote = document.getElementById("modNote").value.trim();
-  if (freeNote) noteParts.push(freeNote);
-  let extra = 0;
-  for (const s of modSelected) {
-    const m = s.match(/\+(\d+(?:\.\d+)?)€/);
-    if (m) extra += parseFloat(m[1]);
-  }
-  const price = Number(modTarget.kaina || 0) + extra;
-  const modStr = noteParts.join(", ");
-  const ex = cart.find(x => x.pavadinimas === modTarget.pavadinimas && x.pastaba === modStr);
-  if (ex) ex.kiekis += modQty;
-  else cart.push({pavadinimas: modTarget.pavadinimas, kaina: price, kiekis: modQty, pastaba: modStr, plu: modTarget.plu || ""});
-  closeModModal();
+/* 1 paspaudimas = +1 porcija tiesiai į krepšelį */
+function addToCart(it, qty=1) {
+  const hasMods = c => (c.neideti.length || c.pakeisti.length || c.priedai.length || c.nuolaida_proc > 0);
+  const ex = cart.find(c => c.pavadinimas === it.pavadinimas && !hasMods(c));
+  const akcP = Number(it.akcija_proc || 0);
+  if (ex) ex.kiekis += qty;
+  else cart.push({
+    plu: it.plu || "",
+    pavadinimas: it.pavadinimas,
+    zona: it.zona || "kita",
+    kiekis: qty,
+    kaina: Number(it.kaina || 0),
+    ingredientai: Array.isArray(it.ingredientai) ? it.ingredientai : [],
+    ingredientai_info: Array.isArray(it.ingredientai_info) ? it.ingredientai_info : [],
+    neideti: [],
+    pakeisti: [],
+    priedai: [],
+    nuolaida_proc: akcP,
+    akcija: akcP > 0 ? `Akcija -${akcP}%` : ""
+  });
   renderCart();
+}
+
+function chQty(idx, d) {
+  cart[idx].kiekis += d;
+  if (cart[idx].kiekis <= 0) cart.splice(idx, 1);
+  renderCart();
+}
+
+function calcItemUnit(c) {
+  const extraRep = (c.pakeisti || []).reduce((s, x) => s + Number(x.kaina || 0), 0);
+  const extraAdd = (c.priedai || []).reduce((s, x) => s + Number(x.kaina || 0), 0);
+  const disc = Number(c.nuolaida_proc || 0) || Number(document.getElementById("inpOrderDisc")?.value || 0);
+  const base = disc > 0 ? Math.max(0, c.kaina * (1 - disc / 100)) : c.kaina;
+  return Math.max(0, base + extraRep + extraAdd);
 }
 
 function renderCart() {
-  let tot = 0;
-  document.getElementById("cartItems").innerHTML = cart.map((c, i) => {
-    tot += c.kaina * c.kiekis;
+  const box = document.getElementById("cartItems");
+  if (!cart.length) {
+    box.innerHTML = `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0;">Krepšelis tuščias – spauskite ant patiekalo</div>`;
+    document.getElementById("cartTotal").textContent = "0.00 €";
+    return;
+  }
+  let sum = 0;
+  box.innerHTML = cart.map((c, i) => {
+    const uPrice = calcItemUnit(c);
+    sum += c.kiekis * uPrice;
+    const zm = getZoneMeta(c.zona);
+    const badges = [
+      ...(c.neideti || []).map(x => `<span class="mod-badge mb-no">BE: ${x}</span>`),
+      ...(c.pakeisti || []).map(x => `<span class="mod-badge mb-rep">${x.orig} → ${x.naujas}${x.kaina>0?' (+'+x.kaina.toFixed(2)+'€)':''}</span>`),
+      ...(c.priedai || []).map(x => `<span class="mod-badge mb-add">+ ${x.pavadinimas}${x.kaina>0?' (+'+x.kaina.toFixed(2)+'€)':''}</span>`),
+      ...(c.nuolaida_proc > 0 ? [`<span class="mod-badge mb-disc">-${c.nuolaida_proc}% ${c.akcija||''}</span>`] : [])
+    ].join("");
     return `
       <div class="cart-row">
-        <div class="cart-info">
-          <div class="cart-title">${c.pavadinimas}</div>
-          ${c.pastaba ? `<div class="cart-sub">${c.pastaba}</div>` : `<div style="font-size:11px;color:var(--muted);">${c.kaina.toFixed(2)} €</div>`}
+        <div class="row-between">
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:13px;">
+              <span style="color:${zm.spalva};font-weight:900;">[${zm.kodas}]</span> ${c.pavadinimas}
+            </div>
+            <div style="font-size:11.5px;color:var(--muted);">${uPrice.toFixed(2)} € × ${c.kiekis} = <b style="color:var(--amber);">${(c.kiekis*uPrice).toFixed(2)} €</b></div>
+            ${badges ? `<div>${badges}</div>` : ""}
+          </div>
+          <div class="qty-ctrl">
+            <button class="q-btn" onclick="chQty(${i},-1)">−</button>
+            <b style="min-width:20px;text-align:center;">${c.kiekis}</b>
+            <button class="q-btn" onclick="chQty(${i},1)">+</button>
+          </div>
         </div>
-        <div class="qty-ctrl">
-          <button class="q-btn" onclick="cartQty(${i},-1)">−</button>
-          <b>${c.kiekis}</b>
-          <button class="q-btn" onclick="cartQty(${i},1)">+</button>
+        <div class="pay-row" style="margin-top:0;">
+          <button class="btn" style="flex:1;padding:6px 8px;font-size:11.5px;" onclick="openModModal(${i})">⚙️ Modifikuoti</button>
+          <button class="btn" style="flex:1;padding:6px 8px;font-size:11.5px;color:var(--amber);" onclick="openModModal(${i}, true)">🏷️ Akcija</button>
         </div>
       </div>`;
-  }).join("") || `<div style="color:var(--muted);font-size:12px;text-align:center;padding:10px;">Krepšelis tuščias</div>`;
-  document.getElementById("cartTotal").textContent = tot.toFixed(2) + " €";
-}
-function cartQty(i, d) {
-  cart[i].kiekis += d;
-  if (cart[i].kiekis <= 0) cart.splice(i, 1);
-  renderCart();
+  }).join("");
+  document.getElementById("cartTotal").textContent = sum.toFixed(2) + " €";
 }
 
+/* Modifikatoriai */
+async function openModModal(idx, focusPromo=false) {
+  modIdx = idx;
+  const c = cart[idx];
+  if (!sandelisItems.length || !c.ingredientai.length || !c.ingredientai_info?.length) {
+    await syncRemoteData(false);
+    const liveMatch = menu.find(m => m.pavadinimas.toLowerCase() === c.pavadinimas.toLowerCase());
+    if (liveMatch) {
+      if (Array.isArray(liveMatch.ingredientai) && liveMatch.ingredientai.length) c.ingredientai = [...liveMatch.ingredientai];
+      if (Array.isArray(liveMatch.ingredientai_info) && liveMatch.ingredientai_info.length) c.ingredientai_info = [...liveMatch.ingredientai_info];
+    }
+  }
+  modDraft = {
+    neideti: [...(c.neideti || [])],
+    pakeisti: JSON.parse(JSON.stringify(c.pakeisti || [])),
+    priedai: JSON.parse(JSON.stringify(c.priedai || [])),
+    nuolaida_proc: Number(c.nuolaida_proc || 0),
+    akcija: c.akcija || ""
+  };
+  document.getElementById("modTitle").textContent = "⚙️ " + c.pavadinimas;
+  document.getElementById("modSub").textContent = `Receptūroje: ${c.ingredientai.length} ingr. • Sandėlyje: ${sandelisItems.length} prek.`;
+  document.getElementById("inpItemDisc").value = modDraft.nuolaida_proc || "";
+  document.getElementById("inpItemPromo").value = modDraft.akcija || "";
+  document.getElementById("inpAddonCustom").value = "";
+  renderModChips(); renderReplaceSelects(); renderSandelisSelect(); renderModLists();
+  document.getElementById("modModal").classList.add("open");
+  if (focusPromo) document.getElementById("inpItemDisc").focus();
+}
+function closeModModal() { document.getElementById("modModal").classList.remove("open"); }
+function renderModChips() {
+  const c = cart[modIdx];
+  const allNames = [...new Set([...(c.ingredientai || []), ...modDraft.neideti])];
+  document.getElementById("modIngChips").innerHTML = allNames.length
+    ? allNames.map(n => {
+        const on = modDraft.neideti.includes(n);
+        return `<button class="ing-chip ${on?'on':''}" onclick='toggleNoIng(${JSON.stringify(n)})'>${on?'🚫 ':''}${n}</button>`;
+      }).join("")
+    : `<span style="font-size:12px;color:var(--muted);">Nėra receptūros sąrašo – įrašykite žemiau</span>`;
+}
+function toggleNoIng(n) {
+  const i = modDraft.neideti.indexOf(n);
+  if (i >= 0) modDraft.neideti.splice(i, 1); else modDraft.neideti.push(n);
+  renderModChips();
+}
+function addCustomNo() {
+  const el = document.getElementById("inpCustomNo");
+  const v = el.value.trim();
+  if (!v) return;
+  if (!modDraft.neideti.includes(v)) modDraft.neideti.push(v);
+  el.value = ""; renderModChips();
+}
+function cleanProdName(n) {
+  return String(n || "").replace(/_{1,2}(l|vnt|kg)$/i, "").trim();
+}
+function activeSandelis() {
+  return (sandelisItems || []).filter(s => Number(s.kiekis || 0) > 0.0001);
+}
+function findSandPrice(name) {
+  const low = cleanProdName(name).toLowerCase();
+  const it = (sandelisItems || []).find(s => cleanProdName(s.pavadinimas).toLowerCase() === low);
+  return it ? {kaina: Number(it.kaina || 0), unit: String(it.mat_vnt || "kg").toLowerCase()} : {kaina: 0, unit: "kg"};
+}
+function toBaseQty(qty, vnt) {
+  const u = String(vnt || "g").toLowerCase();
+  return (u === "g" || u === "gr" || u === "ml") ? (Number(qty) / 1000.0) : Number(qty);
+}
+function renderReplaceSelects() {
+  const c = cart[modIdx];
+  const infos = (c.ingredientai_info && c.ingredientai_info.length)
+    ? c.ingredientai_info
+    : (c.ingredientai || []).map(x => ({pav: x, kiekis: 100, vnt: "g"}));
+  document.getElementById("selRepOrig").innerHTML = infos.length
+    ? infos.map(x => `<option value="${x.pav}" data-qty="${x.kiekis}" data-unit="${x.vnt}">${x.pav}</option>`).join("")
+    : `<option value="">-- Nėra receptūros --</option>`;
+  const avail = activeSandelis();
+  document.getElementById("selRepNew").innerHTML = avail.length
+    ? avail.map(s => { const nm = cleanProdName(s.pavadinimas); return `<option value="${nm}" data-price="${Number(s.kaina||0)}" data-unit="${s.mat_vnt||'kg'}">${nm}</option>`; }).join("")
+    : `<option value="">-- Sandėlyje nėra likučių --</option>`;
+}
+function addReplaceMod() {
+  const oSel = document.getElementById("selRepOrig");
+  const nSel = document.getElementById("selRepNew");
+  const oOpt = oSel.options[oSel.selectedIndex];
+  const nOpt = nSel.options[nSel.selectedIndex];
+  const orig = oSel.value;
+  const naujas = nSel.value;
+  if (!orig || !naujas) return;
+  const qty = oOpt ? Number(oOpt.dataset.qty || 0) : 0;
+  const vnt = oOpt ? String(oOpt.dataset.unit || "g") : "g";
+  const baseQty = toBaseQty(qty, vnt);
+  const newUnitPrice = nOpt ? Number(nOpt.dataset.price || 0) : 0;
+  const origInfo = findSandPrice(orig);
+  const diff = (baseQty * newUnitPrice) - (baseQty * origInfo.kaina);
+  const kaina = Math.max(0, Number(diff.toFixed(2)));
+  modDraft.pakeisti.push({orig, naujas, kiekis: qty, vnt, kaina});
+  renderModLists();
+}
+function renderSandelisSelect() {
+  const q = (document.getElementById("inpSandFilter").value || "").toLowerCase().trim();
+  const sel = document.getElementById("selSandAddon");
+  const avail = activeSandelis();
+  const list = q ? avail.filter(s => cleanProdName(s.pavadinimas).toLowerCase().includes(q)) : avail;
+  sel.innerHTML = list.length
+    ? list.map(s => {
+        const nm = cleanProdName(s.pavadinimas);
+        return `<option value="${nm}" data-price="${Number(s.kaina||0)}" data-unit="${s.mat_vnt||'vnt'}">${nm}</option>`;
+      }).join("")
+    : `<option value="">-- Sandėlyje nėra likučių --</option>`;
+  onSelectSandAddon();
+}
+function onSelectSandAddon() {
+  const sel = document.getElementById("selSandAddon");
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) return;
+  const u = String(opt.dataset.unit || "vnt").toLowerCase();
+  const subUnit = u === "kg" ? "g" : u === "l" ? "ml" : "vnt";
+  document.getElementById("lblAddonUnit").textContent = subUnit;
+  const qEl = document.getElementById("inpAddonQty");
+  if (subUnit === "vnt") { qEl.step = "1"; qEl.value = "1"; }
+  else { qEl.step = "1"; qEl.value = "10"; }
+  recalcAddonPrice();
+}
+function recalcAddonPrice() {
+  const sel = document.getElementById("selSandAddon");
+  const opt = sel.options[sel.selectedIndex];
+  if (!opt) return;
+  const unitPrice = Number(opt.dataset.price || 0);
+  const u = String(opt.dataset.unit || "vnt").toLowerCase();
+  const rawQty = Math.max(0, Number(document.getElementById("inpAddonQty").value || 0));
+  const effQty = (u === "kg" || u === "l") ? (rawQty / 1000.0) : rawQty;
+  document.getElementById("inpAddonPrice").value = (effQty * unitPrice).toFixed(2);
+}
+function addAddonMod() {
+  const custom = document.getElementById("inpAddonCustom").value.trim();
+  const sel = document.getElementById("selSandAddon");
+  const opt = sel.options[sel.selectedIndex];
+  const pav = custom || (opt ? opt.value : "");
+  if (!pav) return;
+  const u = (!custom && opt) ? String(opt.dataset.unit || "vnt").toLowerCase() : "vnt";
+  const rawQty = Math.max(0.1, Number(document.getElementById("inpAddonQty").value || 1));
+  const kiekis = (u === "kg" || u === "l") ? Number((rawQty / 1000.0).toFixed(4)) : rawQty;
+  const kaina = Math.max(0, Number(document.getElementById("inpAddonPrice").value || 0));
+  const subU = u === "kg" ? "g" : u === "l" ? "ml" : "vnt";
+  modDraft.priedai.push({pavadinimas: pav, kiekis, raw_qty: rawQty, vnt: subU, kaina});
+  document.getElementById("inpAddonCustom").value = "";
+  renderModLists();
+}
+function renderModLists() {
+  document.getElementById("modRepList").innerHTML = modDraft.pakeisti.map((x, idx) => {
+    const pTxt = x.kaina > 0 ? ` (+${x.kaina.toFixed(2)}€)` : '';
+    return `<button class="ing-chip" onclick="modDraft.pakeisti.splice(${idx},1);renderModLists()">🔄 ${x.orig} → ${x.naujas}${pTxt} ✕</button>`;
+  }).join("");
+  document.getElementById("modAddList").innerHTML = modDraft.priedai.map((x, idx) => {
+    const qLbl = x.raw_qty ? `${x.raw_qty}${x.vnt||''}` : `${x.kiekis}×`;
+    return `<button class="ing-chip" onclick="modDraft.priedai.splice(${idx},1);renderModLists()">➕ ${qLbl} ${x.pavadinimas} (+${x.kaina.toFixed(2)}€) ✕</button>`;
+  }).join("");
+}
+function setItemDisc(p) {
+  document.getElementById("inpItemDisc").value = p;
+  if (p > 0 && !document.getElementById("inpItemPromo").value.trim()) {
+    document.getElementById("inpItemPromo").value = `Akcija -${p}%`;
+  }
+}
+async function saveModModal() {
+  const c = cart[modIdx];
+  c.neideti = modDraft.neideti;
+  c.pakeisti = modDraft.pakeisti;
+  c.priedai = modDraft.priedai;
+  const newProc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
+  const oldProc = Number(c.nuolaida_proc || 0);
+  c.nuolaida_proc = newProc;
+  c.akcija = document.getElementById("inpItemPromo").value.trim();
+  if (newProc !== oldProc) {
+    const mIt = menu.find(m => m.pavadinimas === c.pavadinimas);
+    if (mIt) mIt.akcija_proc = newProc;
+    postWithFailover("/api/akcija", {pavadinimas: c.pavadinimas, nuolaida_proc: newProc}).catch(() => {});
+    renderMenu();
+  }
+  closeModModal(); renderCart();
+}
+
+/* Patiekalo akcija (nuo kortelės) */
+function openTilePromo(idx) {
+  tpIdx = idx;
+  const it = menu[idx];
+  const p = Number(it.akcija_proc || 0);
+  document.getElementById("tpTitle").textContent = "🏷️ " + it.pavadinimas;
+  document.getElementById("tpStatus").textContent = p > 0 ? `Aktyvi akcija: -${p}%` : "Šiam patiekalui akcija netaikoma.";
+  document.getElementById("inpTpProc").value = p > 0 ? p : "";
+  document.getElementById("tilePromoModal").classList.add("open");
+}
+function closeTilePromo() { document.getElementById("tilePromoModal").classList.remove("open"); }
+async function applyTilePromo(proc) {
+  const it = menu[tpIdx];
+  if (!it) return;
+  const p = Math.max(0, Math.min(100, Number(proc || 0)));
+  it.akcija_proc = p;
+  localStorage.setItem("mi_app_menu", JSON.stringify(menu));
+  cart.forEach(c => {
+    if (c.pavadinimas === it.pavadinimas) {
+      c.nuolaida_proc = p;
+      c.akcija = p > 0 ? `Akcija -${p}%` : "";
+    }
+  });
+  renderMenu(); renderCart(); closeTilePromo();
+  const r = await postWithFailover("/api/akcija", {pavadinimas: it.pavadinimas, nuolaida_proc: p});
+  toast(r.ok ? (p > 0 ? `🏷️ Akcija -${p}% išsaugota!` : "❌ Akcija nuimta!") : "🏷️ Akcija pritaikyta lokaliai (nėra ryšio)");
+}
+
+/* Užsakymai, Nurašymas, Grąžinimas */
 async function sendOrder(pay) {
   if (!cart.length) return toast("Krepšelis tuščias!", true);
   const cekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
   const {data, laikas, timestamp} = nowParts();
   const note = document.getElementById("inpNote").value.trim();
+  const orderDisc = Number(document.getElementById("inpOrderDisc").value || 0);
+  const orderPromo = orderDisc > 0 ? `Čekio nuolaida -${orderDisc}%` : "";
+
   const payload = {
     cekio_nr: cekis, data, laikas, timestamp,
-    mokejimo_budas: pay, pastaba: note,
-    elementai: cart.map(c => ({pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: c.kaina, pastaba: c.pastaba}))
+    mokejimo_budas: pay, pastaba: note, nuolaida_proc: orderDisc, akcija: orderPromo,
+    elementai: cart.map(c => {
+      const mods = [
+        ...(c.neideti || []).map(x => ({pavadinimas: "Be " + x, tipas: "isimti"})),
+        ...(c.pakeisti || []).map(x => ({pavadinimas: `keisti ${x.orig} į ${x.naujas}`, kaina: Number(x.kaina || 0)})),
+        ...(c.priedai || []).map(x => ({pavadinimas: x.pavadinimas, kiekis: Number(x.kiekis || 1), kaina: Number(x.kaina || 0), tipas: "prideti"}))
+      ];
+      return {
+        kodas: c.plu || "",
+        pavadinimas: c.pavadinimas,
+        kiekis: c.kiekis,
+        kaina: Number(c.kaina || 0),
+        pradine_kaina: Number(c.kaina || 0),
+        komentaras: note,
+        modifikacijos: mods,
+        nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
+        akcija: c.akcija || orderPromo
+      };
+    })
   };
-  const total = cart.reduce((s, c) => s + c.kaina * c.kiekis, 0);
-  const res = await sendPayloadWithFailover(payload);
+  const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+  const res = await postWithFailover("/api/uzsakymas", payload);
 
-  receipts.unshift({cekis, data: timestamp, total, items: [...cart], status: "Aktyvus", via: res.ok ? res.channel : "queue"});
+  receipts.unshift({cekis, data: timestamp, total, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
   receipts = receipts.slice(0, 40);
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   cart = [];
   document.getElementById("inpNote").value = "";
+  document.getElementById("inpOrderDisc").value = "";
   renderCart(); renderReceipts();
 
-  if (res.ok) {
-    toast(res.channel === "cloud" ? `☁️ Čekis #${cekis} išsiųstas į Cloud!` : `🏠 Cloud neatsako — #${cekis} priimtas per LAN!`);
-  } else {
+  if (res.ok) toast(res.channel === "cloud" ? `☁️ Čekis #${cekis} išsiųstas į Cloud!` : `🏠 Cloud neatsako — #${cekis} priimtas per LAN!`);
+  else {
     offlineQueue.push(payload);
     localStorage.setItem("mi_app_queue", JSON.stringify(offlineQueue));
     toast(`📴 Nėra ryšio — #${cekis} įrašytas į eilę!`, true);
@@ -607,9 +981,9 @@ async function writeOffCart() {
   const payload = {
     veiksmas: "nurasyti", cekio_nr: cekis, data, laikas, timestamp,
     priezastis: document.getElementById("inpNote").value.trim() || "Mobilios kasos nurašymas",
-    elementai: cart.map(c => ({pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: c.kaina}))
+    elementai: cart.map(c => ({pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c)}))
   };
-  const res = await sendPayloadWithFailover(payload);
+  const res = await postWithFailover("/api/uzsakymas", payload);
   cart = []; renderCart();
   if (res.ok) toast(`🗑️ Nurašyta per ${res.channel.toUpperCase()}!`);
   else {
@@ -619,20 +993,34 @@ async function writeOffCart() {
   }
 }
 
-async function refundRec(i) {
+async function cancelOrRefund(i, op) {
   const r = receipts[i];
   const {data, laikas, timestamp} = nowParts();
-  const payload = {veiksmas: "grazinti", cekio_nr: r.cekis, priezastis: "Mobilios kasos grąžinimas", data, laikas, timestamp};
-  const res = await sendPayloadWithFailover(payload);
-  r.status = "Grąžinta";
+  const payload = {
+    veiksmas: op,
+    cekio_nr: r.cekis,
+    priezastis: op === "atsaukti" ? "Mobilios kasos nurašymas" : "Mobilios kasos grąžinimas",
+    data, laikas, timestamp
+  };
+  const res = await postWithFailover("/api/uzsakymas", payload);
+  r.status = op === "atsaukti" ? "Nurašyta" : "Grąžinta";
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   renderReceipts();
-  if (res.ok) toast(`↩️ #${r.cekis} grąžinta per ${res.channel.toUpperCase()}!`);
+  if (res.ok) toast((op === "atsaukti" ? "🗑️ #" : "↩️ #") + r.cekis + ` ${r.status.toLowerCase()} per ${res.channel.toUpperCase()}!`);
   else {
     offlineQueue.push(payload);
     localStorage.setItem("mi_app_queue", JSON.stringify(offlineQueue));
-    toast(`📴 Grąžinimas #${r.cekis} įrašytas į eilę!`, true);
+    toast(`📴 Veiksmas #${r.cekis} įrašytas į eilę!`, true);
   }
+}
+
+function clearInactiveReceipts() {
+  const before = receipts.length;
+  receipts = receipts.filter(r => r.status === "Aktyvus");
+  localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+  renderReceipts();
+  const removed = before - receipts.length;
+  toast(removed > 0 ? `🧹 Išvalyta neaktyvių čekių: ${removed}` : "Neaktyvių čekių nėra.");
 }
 
 function renderReceipts() {
@@ -641,42 +1029,75 @@ function renderReceipts() {
     <div class="glass-card">
       <div class="row-between">
         <b>#${r.cekis} • ${r.data}</b>
-        <b style="color:${r.status==='Aktyvus'?'var(--green)':'var(--amber)'}">${r.status} • ${Number(r.total||0).toFixed(2)} €</b>
+        <b style="color:${r.status==='Aktyvus'?'var(--green)':(r.status==='Nurašyta'?'var(--red)':'var(--amber)')}">${r.status} • ${Number(r.total||0).toFixed(2)} €</b>
       </div>
       <div style="font-size:12px;color:var(--muted);">${r.items.map(x => x.kiekis+'× '+x.pavadinimas).join(', ')}</div>
       <div class="row-between">
-        <span style="font-size:11px;color:var(--sky);">${r.via==='cloud'?'☁️ Cloud':r.via==='lan'?'🏠 LAN':'📴 Eilė'}</span>
-        <button class="btn btn-amber" style="padding:7px 12px;font-size:12px;" ${r.status!=='Aktyvus'?'disabled style="opacity:0.4"':''} onclick="refundRec(${i})">↩️ Grąžinti</button>
+        <span style="font-size:11px;color:var(--amber);">${r.via==='cloud'?'☁️ Cloud':r.via==='lan'?'🏠 LAN':'📴 Eilė'}</span>
+        <div style="display:flex;gap:6px;">
+          <button class="btn btn-red" style="flex:0 0 auto;padding:7px 11px;font-size:12px;${r.status!=='Aktyvus'?'opacity:0.4;pointer-events:none;':''}" ${r.status!=='Aktyvus'?'disabled':''} onclick="cancelOrRefund(${i},'atsaukti')">🗑️ Nurašyti</button>
+          <button class="btn btn-amber" style="flex:0 0 auto;padding:7px 11px;font-size:12px;${r.status!=='Aktyvus'?'opacity:0.4;pointer-events:none;':''}" ${r.status!=='Aktyvus'?'disabled':''} onclick="cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+        </div>
       </div>
     </div>
   `).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Čekių istorija tuščia.</div>`;
 }
 
-async function syncRemoteData() {
+/* Sinchronizacija su Model MI (/api/meniu ir /api/sandelis) */
+async function syncRemoteData(notify=false) {
   const urls = cfg.mode === "cloud" ? [cfg.cloudUrl] : cfg.mode === "lan" ? [cfg.lanUrl] : [cfg.lanUrl, cfg.cloudUrl];
+  let gotMenu = false;
   for (const base of urls) {
     const u = cleanUrl(base);
     if (!u) continue;
     try {
-      const r = await fetchTimeout(u + "/api/meniu", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000);
-      if (r.ok) {
-        const js = await r.json();
+      const [rm, rs] = await Promise.all([
+        fetchTimeout(u + "/api/meniu", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000),
+        fetchTimeout(u + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000).catch(() => null)
+      ]);
+      if (rm.ok) {
+        const js = await rm.json();
         const list = js.meniu || js.menu || [];
         if (list.length) {
-          menu = list.map((x, idx) => ({
-            plu: x.plu || String(100 + idx),
-            pavadinimas: x.pavadinimas || x.name || "Patiekalas",
-            kategorija: x.kategorija || x.zona || "Kita",
-            kaina: Number(x.kaina || x.kaina_su_pvm || 0)
-          }));
+          menu = list.map((m, idx) => {
+            const k = m.kortele || {};
+            const rawList = Array.isArray(k.produktai) ? k.produktai : (Array.isArray(k.ingredientai) ? k.ingredientai : (m.ingredientai || []));
+            const ingInfo = rawList.map(x => {
+              if (typeof x === "string") return {pav: x, kiekis: 100, vnt: "g"};
+              return {
+                pav: x.produktas || x.pavadinimas || "",
+                kiekis: Number(x.kiekis || 0),
+                vnt: String(x.mato_vnt || x.vnt || "g")
+              };
+            }).filter(x => x.pav);
+            const ing = ingInfo.map(x => x.pav);
+            return {
+              plu: m.plu || String(100 + idx),
+              pavadinimas: m.pavadinimas || "Patiekalas",
+              kat: m.tipas === "baras" ? "Baras" : (m.tipas === "dienos" ? "Dienos pietūs" : "Model MI Meniu"),
+              zona: m.zona || (m.tipas === "baras" ? "baras" : "virtuve"),
+              kaina: Number(m.kaina || 0),
+              akcija_proc: Number(m.akcija_proc || 0),
+              ingredientai: ing,
+              ingredientai_info: ingInfo
+            };
+          });
           localStorage.setItem("mi_app_menu", JSON.stringify(menu));
-          renderMenu();
-          toast(`✅ Meniu atnaujintas (${menu.length} patiek.)`);
-          return;
+          gotMenu = true;
         }
       }
+      if (rs && rs.ok) {
+        const jss = await rs.json();
+        if (Array.isArray(jss.sandelis) && jss.sandelis.length) {
+          sandelisItems = jss.sandelis;
+          localStorage.setItem("mi_app_sandelis", JSON.stringify(sandelisItems));
+        }
+      }
+      if (gotMenu) break;
     } catch {}
   }
+  renderMenu();
+  if (notify) toast(gotMenu ? `✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.` : "⚠️ Nepavyko pasiekti meniu", !gotMenu);
 }
 
 async function loadKDS() {
@@ -689,15 +1110,17 @@ async function loadKDS() {
     const js = await r.json();
     const list = js.uzsakymai || [];
     document.getElementById("kdsCnt").textContent = list.length;
-    el.innerHTML = list.map(u => `
-      <div class="glass-card">
-        <div class="row-between">
-          <b>#${u.cekio_nr || u.nr || ''} • ${u.pavadinimas || ''}</b>
-          <span style="color:var(--amber);font-size:12px;font-weight:700;">${u.zona || 'Virtuvė'}</span>
-        </div>
-        <div style="font-size:12px;color:var(--muted);">Laikas: ${u.uzsakymo_laikas || u.laikas || ''} ${u.komentaras ? '• '+u.komentaras : ''}</div>
-      </div>
-    `).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Aktyvių užsakymų virtuvėje nėra.</div>`;
+    el.innerHTML = list.map(u => {
+      const zm = getZoneMeta(u.zona);
+      return `
+        <div class="glass-card" style="box-shadow:0 0 14px ${zm.spalva}26, 0 4px 16px rgba(0,0,0,0.5);">
+          <div class="row-between">
+            <b>#${u.cekio_nr || u.nr || ''} • ${u.pavadinimas || ''}</b>
+            <span class="zone-badge" style="color:${zm.spalva};text-shadow:0 0 10px ${zm.spalva}88;">${zm.kodas}</span>
+          </div>
+          <div style="font-size:12px;color:var(--muted);">Laikas: ${u.uzsakymo_laikas || u.laikas || ''} ${u.komentaras ? '• '+u.komentaras : ''}</div>
+        </div>`;
+    }).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Aktyvių užsakymų virtuvėje nėra.</div>`;
   } catch {
     el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">Virtuvės ekranas pasiekiamas tik prisijungus prie vietinio LAN (Model MI).</div>`;
   }
@@ -722,7 +1145,7 @@ function saveSettings() {
   closeSettings();
   toast("💾 Nustatymai išsaugoti!");
   checkConnections(false);
-  syncRemoteData();
+  syncRemoteData(false);
 }
 async function testDiag() {
   const box = document.getElementById("diagBox");
@@ -730,12 +1153,12 @@ async function testDiag() {
   const c = await checkEndpoint(document.getElementById("cfgCloud").value, 3500);
   const l = await checkEndpoint(document.getElementById("cfgLan").value, 2500);
   box.innerHTML = `☁️ Cloud: <b style="color:${c.ok?'#4ADE80':'#FCA5A5'}">${c.ok ? 'VEIKIA ('+c.ms+' ms)' : 'NEPASIEKIAMAS'}</b><br>` +
-                  `🏠 LAN: <b style="color:${l.ok?'#38BDF8':'#FCA5A5'}">${l.ok ? 'VEIKIA ('+l.ms+' ms)' : 'NEPASIEKIAMAS'}</b>`;
+                  `🏠 LAN: <b style="color:${l.ok?'#FFB300':'#FCA5A5'}">${l.ok ? 'VEIKIA ('+l.ms+' ms)' : 'NEPASIEKIAMAS'}</b>`;
 }
 
 renderMenu(); renderCart(); renderReceipts();
 checkConnections(false);
-syncRemoteData();
+syncRemoteData(false);
 setInterval(() => checkConnections(false), 7000);
 </script>
 </body>
