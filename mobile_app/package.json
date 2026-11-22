@@ -1,0 +1,11 @@
+{
+  "name": "model-mi-kasa-mobile",
+  "version": "1.0.0",
+  "description": "Model MI Kasa (Cloud -> LAN Auto-Failover)",
+  "private": true,
+  "dependencies": {
+    "@capacitor/android": "^6.1.2",
+    "@capacitor/cli": "^6.1.2",
+    "@capacitor/core": "^6.1.2"
+  }
+}
