@@ -12,15 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: "20"
+          node-version: "22"
 
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: "temurin"
           java-version: "17"
@@ -31,11 +31,22 @@ jobs:
           npm install
           npx cap add android
           python3 -c '
+          import os, shutil
           p = "android/app/src/main/AndroidManifest.xml"
           s = open(p).read()
           if "usesCleartextTraffic" not in s:
               s = s.replace("<application", "<application android:usesCleartextTraffic=\"true\"", 1)
               open(p, "w").write(s)
+          res_dir = "android/app/src/main/res"
+          anydpi = os.path.join(res_dir, "mipmap-anydpi-v26")
+          if os.path.isdir(anydpi):
+              shutil.rmtree(anydpi)
+          src_icon = "www/icon-512.png" if os.path.exists("www/icon-512.png") else "www/icon.png"
+          if os.path.exists(src_icon):
+              for root, _, files in os.walk(res_dir):
+                  for fn in files:
+                      if fn in ("ic_launcher.png", "ic_launcher_round.png", "ic_launcher_foreground.png"):
+                          shutil.copy(src_icon, os.path.join(root, fn))
           '
           npx cap sync android
 
@@ -46,7 +57,7 @@ jobs:
           ./gradlew assembleDebug
 
       - name: Upload Model-MI-Kasa.apk
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: Model-MI-Kasa-APK
           path: mobile_app/android/app/build/outputs/apk/debug/app-debug.apk
