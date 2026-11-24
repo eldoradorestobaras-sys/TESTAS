@@ -68,6 +68,128 @@ def _save_state(state: Dict) -> None:
 _STATE = _load_state()
 
 
+def _svc_state() -> Dict:
+    svc = _STATE.get("service")
+    if not isinstance(svc, dict):
+        svc = {
+            "staff": [
+                {"id": "w1", "vardas": "Laura", "pin": "1111", "role": "padavejas", "aktyvus": True},
+                {"id": "w2", "vardas": "Tomas", "pin": "2222", "role": "padavejas", "aktyvus": True},
+                {"id": "mgr", "vardas": "Vadybininkas", "pin": "0000", "role": "vadybininkas", "aktyvus": True},
+            ],
+            "work_hours": {"ijungta": True, "pradzia": "08:00", "pabaiga": "22:00"},
+            "cash_rounding": False,
+            "shift_payments": [],
+            "tables": [
+                {
+                    "id": f"t{i}", "nr": i, "pavadinimas": f"Stalas {i}",
+                    "zona": "Salė" if i <= 7 else "Terasa",
+                    "padavejas_id": "w1" if i <= 5 else "w2",
+                    "atidare_id": "", "status": "laisvas", "sveciu_sk": 0, "opened_at": "", "checks": [],
+                }
+                for i in range(1, 11)
+            ],
+        }
+        _STATE["service"] = svc
+    svc.setdefault("cash_rounding", False)
+    svc.setdefault("shift_payments", [])
+    return svc
+
+
+def _svc_round_5ct(suma: float) -> float:
+    from decimal import Decimal, ROUND_HALF_UP
+    d = Decimal(str(round(float(suma or 0.0), 2)))
+    if d <= Decimal("0.00"):
+        return 0.0
+    return float((d / Decimal("0.05")).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal("0.05"))
+
+
+def _svc_shift_summary(svc: dict, uid: str, is_mgr: bool = False) -> dict:
+    today = datetime.now().strftime("%Y-%m-%d")
+    rows = [p for p in (svc.get("shift_payments") or []) if str(p.get("date") or "") == today]
+    by_staff = {}
+    for p in rows:
+        sid = str(p.get("staff_id") or "")
+        rec = by_staff.setdefault(sid, {
+            "id": sid, "vardas": str(p.get("staff_name") or "Nežinomas"),
+            "count": 0, "cash": 0.0, "card": 0.0, "rounding_diff": 0.0, "total": 0.0,
+        })
+        rec["count"] += 1
+        rec["cash"] = round(rec["cash"] + float(p.get("cash_amount") or 0.0), 2)
+        rec["card"] = round(rec["card"] + float(p.get("card_amount") or 0.0), 2)
+        rec["rounding_diff"] = round(rec["rounding_diff"] + float(p.get("rounding_diff") or 0.0), 2)
+        rec["total"] = round(rec["total"] + float(p.get("paid_total") or 0.0), 2)
+    my = dict(by_staff.get(uid) or {"id": uid, "vardas": "", "count": 0, "cash": 0.0, "card": 0.0, "rounding_diff": 0.0, "total": 0.0})
+    out = {"date": today, "my": my}
+    if is_mgr:
+        out["by_staff"] = list(by_staff.values())
+        out["grand"] = {
+            "count": sum(r["count"] for r in by_staff.values()),
+            "cash": round(sum(r["cash"] for r in by_staff.values()), 2),
+            "card": round(sum(r["card"] for r in by_staff.values()), 2),
+            "rounding_diff": round(sum(r["rounding_diff"] for r in by_staff.values()), 2),
+            "total": round(sum(r["total"] for r in by_staff.values()), 2),
+        }
+    return out
+
+
+def _svc_after_hours(wh: dict) -> tuple:
+    if not wh or not wh.get("ijungta", True):
+        return False, ""
+    try:
+        sh, sm = [int(x) for x in str(wh.get("pradzia", "08:00")).split(":")]
+        eh, em = [int(x) for x in str(wh.get("pabaiga", "22:00")).split(":")]
+        dt = datetime.now()
+        cur = dt.hour * 60 + dt.minute
+        s_m, e_m = sh * 60 + sm, eh * 60 + em
+        inside = (s_m <= cur < e_m) if s_m <= e_m else (cur >= s_m or cur < e_m)
+        if not inside:
+            return True, f"Darbo laikas ({wh.get('pradzia')}–{wh.get('pabaiga')}) baigėsi. Galima tik apmokėti/uždaryti pradėtus stalus."
+    except Exception:
+        pass
+    return False, ""
+
+
+def _svc_user(svc: dict, pin: str):
+    p = str(pin or "").strip()
+    for s in svc.get("staff") or []:
+        if s.get("aktyvus", True) and str(s.get("pin") or "").strip() == p:
+            return s
+    return None
+
+
+def _svc_serialize_table(t: dict, staff_map: dict) -> dict:
+    checks_out = []
+    tot, unp, dcnt = 0.0, 0.0, 0
+    for chk in t.get("checks") or []:
+        ds, ss, dc, sc = 0.0, 0.0, 0, 0
+        for it in chk.get("items") or []:
+            if it.get("status") == "voided":
+                continue
+            ls = float(it.get("kiekis") or 0) * float(it.get("kaina") or 0)
+            if it.get("status", "draft") == "draft":
+                ds += ls; dc += 1
+            else:
+                ss += ls; sc += 1
+        c_tot = round(ds + ss, 2)
+        cp = dict(chk)
+        cp["totals"] = {"draft_sum": round(ds, 2), "sent_sum": round(ss, 2), "total": c_tot, "draft_cnt": dc, "sent_cnt": sc}
+        checks_out.append(cp)
+        tot += c_tot
+        if chk.get("status") != "apmoketas":
+            unp += c_tot
+            dcnt += dc
+    return {
+        "id": t["id"], "nr": t["nr"], "pavadinimas": t["pavadinimas"],
+        "zona": t.get("zona", "Salė"), "padavejas_id": t.get("padavejas_id", ""),
+        "padavejas_vardas": staff_map.get(t.get("padavejas_id", ""), "Nepriskirtas"),
+        "atidare_id": t.get("atidare_id", ""),
+        "status": t.get("status", "laisvas"), "sveciu_sk": int(t.get("sveciu_sk") or 0),
+        "opened_at": t.get("opened_at", ""), "total_sum": round(tot, 2),
+        "unpaid_sum": round(unp, 2), "draft_cnt": dcnt, "checks": checks_out,
+    }
+
+
 def _broadcast_sse(ev_id: int, payload: dict) -> None:
     msg = f"id: {ev_id}\nevent: uzsakymas\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n".encode("utf-8")
     dead = []
@@ -323,7 +445,11 @@ async function sendOrder(pay) {
 }
 async function refundRec(i) {
   const r = receipts[i];
-  const res = await fetch("/api/uzsakymas", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({veiksmas:"grazinti", cekio_nr:r.cekis, priezastis:"Cloud kasos grąžinimas"})});
+  const d = new Date();
+  const pad = n => String(n).padStart(2, "0");
+  const dateStr = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  const timeStr = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  const res = await fetch("/api/uzsakymas", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({veiksmas:"grazinti", cekio_nr:r.cekis, priezastis:"Cloud kasos grąžinimas", data:dateStr, laikas:timeStr, timestamp:`${dateStr} ${timeStr}`})});
   if (res.ok) { r.status = "Grąžinta"; localStorage.setItem("mi_cloud_rec", JSON.stringify(receipts)); renderReceipts(); toast(`↩️ #${r.cekis} grąžinta!`); }
 }
 function renderReceipts() {
@@ -441,6 +567,133 @@ class CloudHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"uzsakymai": filtered}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
+        if path == "/app" or path.startswith("/app/"):
+            rel = path[len("/app"):].lstrip("/") or "index.html"
+            app_root = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "mobile_app", "www"))
+            target = os.path.abspath(os.path.join(app_root, rel))
+            if target.startswith(app_root) and os.path.isfile(target):
+                ext = os.path.splitext(target)[1].lower()
+                ctype = {
+                    ".html": "text/html; charset=utf-8",
+                    ".json": "application/json; charset=utf-8",
+                    ".png": "image/png",
+                    ".svg": "image/svg+xml",
+                    ".js": "application/javascript; charset=utf-8",
+                    ".css": "text/css; charset=utf-8",
+                }.get(ext, "application/octet-stream")
+                with open(target, "rb") as f:
+                    data = f.read()
+                self.send_response(200)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(data)))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                self.wfile.write(data)
+                return
+            self._send(404, b'{"klaida":"App failas nerastas"}', "application/json")
+            return
+
+        if path == "/api/meniu":
+            qs = urllib.parse.parse_qs(parsed.query)
+            src = str((qs.get("source") or [""])[0]).strip()
+            meniu_out = None
+            if src == "model_mi":
+                db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "model_mi.db"))
+                if os.path.exists(db_path):
+                    try:
+                        import sys as _sys
+                        parent_dir = os.path.dirname(db_path)
+                        if parent_dir not in _sys.path:
+                            _sys.path.insert(0, parent_dir)
+                        from pos_integracija import POSOrderProcessor
+                        meniu_out = POSOrderProcessor.gauti_visus_meniu_patiekalus()
+                    except Exception:
+                        meniu_out = None
+            if not meniu_out:
+                with _LOCK:
+                    meniu_out = _STATE.get("menu") or DEFAULT_MENU
+            self._send(200, json.dumps({"viso_patiekalu": len(meniu_out), "meniu": meniu_out}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/sandelis":
+            items_out = None
+            db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "model_mi.db"))
+            if os.path.exists(db_path):
+                try:
+                    import sys as _sys
+                    parent_dir = os.path.dirname(db_path)
+                    if parent_dir not in _sys.path:
+                        _sys.path.insert(0, parent_dir)
+                    from db_engine import DBManager, get_connection
+                    sand = DBManager.gauti_sandeli() or {}
+                    kainos_map = {}
+                    conn = get_connection()
+                    for kr, kk, kpvm in conn.execute("SELECT lower(trim(raktas)), kaina, pvm FROM produktai_kainos;").fetchall():
+                        if kr and kk is not None:
+                            kainos_map[kr] = (float(kk or 0.0), float(kpvm if kpvm is not None else 21.0))
+                    items_out = []
+                    for k, v in sand.items():
+                        lik = float(v.get("kiekis") or 0.0) if isinstance(v, dict) else 0.0
+                        vnt = str(v.get("vnt") or "kg") if isinstance(v, dict) else "kg"
+                        kp = kainos_map.get(str(k).strip().lower(), (0.0, 21.0))
+                        items_out.append({"pavadinimas": k, "kiekis": lik, "mat_vnt": vnt, "kaina": kp[0], "pvm": kp[1]})
+                except Exception:
+                    items_out = None
+            if items_out is None:
+                with _LOCK:
+                    items_out = _STATE.get("sandelis") or []
+            self._send(200, json.dumps({"viso_prekiu": len(items_out), "sandelis": items_out}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/aktyvus":
+            akt_out = []
+            db_path = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "model_mi.db"))
+            if os.path.exists(db_path):
+                try:
+                    import sys as _sys
+                    parent_dir = os.path.dirname(db_path)
+                    if parent_dir not in _sys.path:
+                        _sys.path.insert(0, parent_dir)
+                    from db_engine import DBManager
+                    akt_out = DBManager.gauti_aktyvius_uzsakymus() or []
+                except Exception:
+                    akt_out = []
+            self._send(200, json.dumps({"viso_aktyviu": len(akt_out), "uzsakymai": akt_out}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if path == "/api/stalai":
+            if not self._check_auth(parsed):
+                self._send(401, b'{"klaida":"Unauthorized"}', "application/json")
+                return
+            qs = urllib.parse.parse_qs(parsed.query)
+            pin = str((qs.get("pin") or [self.headers.get("X-Waiter-PIN") or ""])[0]).strip()
+            with _LOCK:
+                svc = _svc_state()
+                user = _svc_user(svc, pin)
+                if not user:
+                    self._send(401, json.dumps({"klaida": "Reikalingas galiojantis PIN."}).encode("utf-8"), "application/json")
+                    return
+                smap = {s["id"]: s["vardas"] for s in svc["staff"]}
+                is_mgr = (user.get("role") == "vadybininkas")
+                tables_out = [
+                    _svc_serialize_table(t, smap) for t in svc["tables"]
+                    if is_mgr or t.get("padavejas_id") == user["id"] or t.get("atidare_id") == user["id"]
+                ]
+                ah, ah_msg = _svc_after_hours(svc.get("work_hours", {}))
+                res = {
+                    "user": {"id": user["id"], "vardas": user["vardas"], "role": user["role"]},
+                    "tables": tables_out, "work_hours": svc.get("work_hours", {}),
+                    "cash_rounding": bool(svc.get("cash_rounding", False)),
+                    "shift_summary": _svc_shift_summary(svc, user["id"], is_mgr),
+                    "after_hours": ah, "after_hours_msg": ah_msg,
+                    "staff_names": [{"id": s["id"], "vardas": s["vardas"], "role": s["role"]} for s in svc["staff"] if s.get("aktyvus", True)],
+                }
+                if is_mgr:
+                    res["staff_admin"] = [dict(s) for s in svc["staff"]]
+                    res["all_tables"] = [_svc_serialize_table(t, smap) for t in svc["tables"]]
+            self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
         with _LOCK:
             menu_cur = _STATE.get("menu") or DEFAULT_MENU
         html = CLOUD_HTML.replace("__MENU_JSON__", json.dumps(menu_cur, ensure_ascii=False))
@@ -475,6 +728,290 @@ class CloudHandler(BaseHTTPRequestHandler):
                     _save_state(_STATE)
                 self._send(200, b'{"sekme":true}', "application/json")
                 return
+
+        if parsed.path == "/api/personalas/login":
+            with _LOCK:
+                svc = _svc_state()
+                user = _svc_user(svc, str(payload.get("pin") or ""))
+                if not user:
+                    self._send(401, json.dumps({"klaida": "Neteisingas PIN kodas."}).encode("utf-8"), "application/json")
+                    return
+                ah, ah_msg = _svc_after_hours(svc.get("work_hours", {}))
+                res = {
+                    "user": {"id": user["id"], "vardas": user["vardas"], "role": user["role"]},
+                    "work_hours": svc.get("work_hours", {}), "after_hours": ah, "after_hours_msg": ah_msg,
+                }
+            self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if parsed.path.startswith("/api/stalai/") or parsed.path == "/api/personalas/nustatymai":
+            import uuid
+            with _LOCK:
+                svc = _svc_state()
+                user = _svc_user(svc, str(payload.get("pin") or ""))
+                if not user:
+                    self._send(401, json.dumps({"klaida": "Neteisingas PIN."}).encode("utf-8"), "application/json")
+                    return
+                smap = {s["id"]: s["vardas"] for s in svc["staff"]}
+                is_mgr = (user.get("role") == "vadybininkas")
+                ah, ah_msg = _svc_after_hours(svc.get("work_hours", {}))
+                mgr_ok = is_mgr or (lambda m: m and m.get("role") == "vadybininkas")(_svc_user(svc, str(payload.get("manager_pin") or "")))
+
+                if parsed.path == "/api/personalas/nustatymai":
+                    if not is_mgr:
+                        self._send(403, json.dumps({"klaida": "Prieiga tik vadybininkui."}).encode("utf-8"), "application/json")
+                        return
+                    if isinstance(payload.get("work_hours"), dict):
+                        svc["work_hours"] = payload["work_hours"]
+                    if isinstance(payload.get("staff"), list):
+                        svc["staff"] = [s for s in payload["staff"] if s.get("vardas") and s.get("pin")]
+                    if "cash_rounding" in payload:
+                        svc["cash_rounding"] = bool(payload.get("cash_rounding"))
+                    if isinstance(payload.get("tables"), list):
+                        ex_map = {str(t.get("id")): t for t in (svc.get("tables") or [])}
+                        new_t = []
+                        seen = set()
+                        for idx, item in enumerate(payload["tables"], start=1):
+                            if not isinstance(item, dict):
+                                continue
+                            tid_i = str(item.get("id") or f"t{idx}_{uuid.uuid4().hex[:4]}").strip()
+                            if not tid_i or tid_i in seen:
+                                tid_i = f"t{idx}_{uuid.uuid4().hex[:4]}"
+                            seen.add(tid_i)
+                            pav = str(item.get("pavadinimas") or f"Stalas {idx}").strip() or f"Stalas {idx}"
+                            zona = str(item.get("zona") or "Salė").strip() or "Salė"
+                            pid = str(item.get("padavejas_id") or "").strip()
+                            prev = ex_map.get(tid_i)
+                            if prev:
+                                u = dict(prev)
+                                u.update({"nr": idx, "pavadinimas": pav, "zona": zona, "padavejas_id": pid})
+                                new_t.append(u)
+                            else:
+                                new_t.append({"id": tid_i, "nr": idx, "pavadinimas": pav, "zona": zona, "padavejas_id": pid, "atidare_id": "", "status": "laisvas", "sveciu_sk": 0, "opened_at": "", "checks": []})
+                        for oid, ot in ex_map.items():
+                            if oid not in seen and ot.get("status") != "laisvas":
+                                oc = dict(ot); oc["nr"] = len(new_t) + 1; new_t.append(oc)
+                        if new_t:
+                            svc["tables"] = new_t
+                    if isinstance(payload.get("table_assignments"), dict):
+                        for tid, pid in payload["table_assignments"].items():
+                            for t in svc["tables"]:
+                                if t["id"] == tid:
+                                    t["padavejas_id"] = str(pid or "")
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({"zinute": "Nustatymai išsaugoti."}).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                tid = str(payload.get("table_id") or "")
+                t = next((x for x in svc["tables"] if x["id"] == tid or str(x["nr"]) == tid), None)
+                if not t:
+                    self._send(400, json.dumps({"klaida": "Stalas nerastas."}).encode("utf-8"), "application/json")
+                    return
+
+                if parsed.path == "/api/stalai/atidaryti":
+                    if ah and not mgr_ok:
+                        self._send(403, json.dumps({"klaida": ah_msg, "after_hours_blocked": True}).encode("utf-8"), "application/json")
+                        return
+                    if t["status"] == "laisvas" or not t["checks"]:
+                        t["status"] = "uzimtas"
+                        t["atidare_id"] = user["id"]
+                        t["sveciu_sk"] = max(1, int(payload.get("sveciu_sk") or 2))
+                        t["opened_at"] = datetime.now().strftime("%H:%M")
+                        t["checks"] = [{"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": "Sąskaita 1", "status": "atviras", "items": []}]
+                        _save_state(_STATE)
+                    self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/prideti":
+                    if ah and not mgr_ok:
+                        self._send(403, json.dumps({"klaida": ah_msg, "after_hours_blocked": True}).encode("utf-8"), "application/json")
+                        return
+                    if t["status"] == "laisvas" or not t["checks"]:
+                        t["status"] = "uzimtas"
+                        t["atidare_id"] = user["id"]
+                        t["sveciu_sk"] = 2
+                        t["opened_at"] = datetime.now().strftime("%H:%M")
+                        t["checks"] = [{"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": "Sąskaita 1", "status": "atviras", "items": []}]
+                    chk = next((c for c in t["checks"] if c["id"] == payload.get("check_id")), None) or t["checks"][0]
+                    qty = float(payload.get("kiekis") or 1)
+                    pav_in = str(payload.get("pavadinimas") or "").strip()
+                    kaina_in = float(payload.get("kaina") or 0)
+                    merged = False
+                    for i_it, it in enumerate(chk["items"]):
+                        if it.get("status") == "draft" and str(it.get("pavadinimas", "")).lower() == pav_in.lower() and abs(float(it.get("kaina", 0)) - kaina_in) < 0.005:
+                            nq = round(float(it["kiekis"]) + qty, 3)
+                            if nq <= 0:
+                                chk["items"].pop(i_it)
+                            else:
+                                it["kiekis"] = nq
+                            merged = True
+                            break
+                    if not merged and qty > 0:
+                        chk["items"].append({
+                            "item_id": f"it_{uuid.uuid4().hex[:8]}",
+                            "pavadinimas": pav_in,
+                            "kiekis": round(qty, 3),
+                            "kaina": round(kaina_in, 2),
+                            "tipas": str(payload.get("tipas") or "patiekalas"),
+                            "status": "draft", "sent_at": "", "batch_id": "",
+                        })
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/siusti":
+                    if ah and not mgr_ok:
+                        self._send(403, json.dumps({"klaida": ah_msg, "after_hours_blocked": True}).encode("utf-8"), "application/json")
+                        return
+                    drafts = [it for c in t["checks"] if c.get("status") != "apmoketas" for it in c["items"] if it.get("status") == "draft"]
+                    if not drafts:
+                        self._send(400, json.dumps({"klaida": "Nėra neišsiųstų pozicijų."}).encode("utf-8"), "application/json")
+                        return
+                    batch_id = uuid.uuid4().hex[:6].upper()
+                    cekio_nr = f"T{t['nr']}-{batch_id}"
+                    ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
+                    sse_pay = {
+                        "cekio_nr": cekio_nr, "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "stalas": t["pavadinimas"], "padavejas": user["vardas"],
+                        "elementai": [{"pavadinimas": it["pavadinimas"], "kiekis": it["kiekis"], "kaina": it["kaina"], "tipas": it.get("tipas", "patiekalas")} for it in drafts],
+                    }
+                    for it in drafts:
+                        it["status"] = "sent"; it["sent_at"] = datetime.now().strftime("%H:%M:%S"); it["batch_id"] = cekio_nr
+                    rec = dict(sse_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = sse_pay["data"]
+                    _STATE["orders"].append(rec); _STATE["orders"] = _STATE["orders"][-300:]
+                    _save_state(_STATE)
+                    _broadcast_sse(ev_id, sse_pay)
+                    self._send(200, json.dumps({"zinute": f"Išsiųsta ({cekio_nr})", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/anuliuoti":
+                    chk = next((c for c in t["checks"] if c["id"] == payload.get("check_id")), None)
+                    it = next((x for x in (chk or {}).get("items", []) if x["item_id"] == payload.get("item_id")), None)
+                    if not it:
+                        self._send(400, json.dumps({"klaida": "Pozicija nerasta."}).encode("utf-8"), "application/json")
+                        return
+                    if it.get("status") == "draft":
+                        chk["items"] = [x for x in chk["items"] if x["item_id"] != it["item_id"]]
+                        _save_state(_STATE)
+                        self._send(200, json.dumps({"zinute": "Pašalinta.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                        return
+                    if not mgr_ok:
+                        self._send(400, json.dumps({"klaida": "Reikalingas vadybininko PIN!", "need_manager_pin": True}).encode("utf-8"), "application/json")
+                        return
+                    it["status"] = "voided"
+                    ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
+                    v_pay = {"veiksmas": "grazinti", "cekio_nr": it.get("batch_id") or f"T{t['nr']}", "pavadinimas": it["pavadinimas"], "kiekis": it["kiekis"], "priezastis": payload.get("priezastis", "")}
+                    rec = dict(v_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    _STATE["orders"].append(rec); _STATE["orders"] = _STATE["orders"][-300:]
+                    _save_state(_STATE)
+                    _broadcast_sse(ev_id, v_pay)
+                    self._send(200, json.dumps({"zinute": "Pozicija anuliuota.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/skelti":
+                    src = next((c for c in t["checks"] if c["id"] == payload.get("source_check_id")), None)
+                    if not src:
+                        self._send(400, json.dumps({"klaida": "Sąskaita nerasta."}).encode("utf-8"), "application/json")
+                        return
+                    if payload.get("mode") == "equal":
+                        n = max(2, min(8, int(payload.get("parts") or 2)))
+                        act = [x for x in src["items"] if x.get("status") != "voided"]
+                        for x in act:
+                            x["kiekis"] = round(float(x["kiekis"]) / n, 3)
+                        for _ in range(n - 1):
+                            t["checks"].append({"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": f"Sąskaita {len(t['checks'])+1}", "status": "atviras", "items": [dict(x, item_id=f"it_{uuid.uuid4().hex[:8]}") for x in act]})
+                    else:
+                        qmap = payload.get("item_qtys") or {}
+                        if not qmap and payload.get("item_ids"):
+                            qmap = {str(k): 999999.0 for k in payload.get("item_ids")}
+                        mv, rem = [], []
+                        for x in src["items"]:
+                            xid = x["item_id"]
+                            if xid in qmap and float(qmap[xid] or 0) > 0 and x.get("status") != "voided":
+                                oq = float(x.get("kiekis") or 0)
+                                mq = min(oq, float(qmap[xid]))
+                                rq = round(oq - mq, 3)
+                                if mq > 0:
+                                    mv.append(dict(x, item_id=f"it_{uuid.uuid4().hex[:8]}", kiekis=round(mq, 3)))
+                                if rq > 0.0001:
+                                    rem.append(dict(x, kiekis=rq))
+                            else:
+                                rem.append(x)
+                        if not mv or not any(x.get("status") != "voided" for x in rem):
+                            self._send(400, json.dumps({"klaida": "Palikite bent vieną poziciją ir pasirinkite ką perkelti."}).encode("utf-8"), "application/json")
+                            return
+                        src["items"] = rem
+                        tid_tgt = str(payload.get("target_check_id") or "")
+                        tgt = next((c for c in t["checks"] if c["id"] == tid_tgt and c["id"] != src["id"] and c.get("status") != "apmoketas"), None)
+                        if tgt:
+                            tgt["items"].extend(mv)
+                        else:
+                            t["checks"].append({"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": f"Sąskaita {len(t['checks'])+1}", "status": "atviras", "items": mv})
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({"zinute": "Užsakymas padalintas.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/saskaita":
+                    t["status"] = "saskaita"
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({"zinute": "Sąskaita pateikta.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/apmoketi":
+                    chk = next((c for c in t["checks"] if c["id"] == payload.get("check_id")), None)
+                    paid_total, raw_total, cash_amt, card_amt, round_diff = 0.0, 0.0, 0.0, 0.0, 0.0
+                    budas = str(payload.get("mokejimo_budas") or "Kortele").strip()
+                    if chk:
+                        raw_total = round(sum(float(it.get("kiekis") or 0) * float(it.get("kaina") or 0) for it in (chk.get("items") or []) if it.get("status") != "voided"), 2)
+                        rounding_on = bool(svc.get("cash_rounding", False))
+                        bl = budas.lower()
+                        if "mišr" in bl or "misr" in bl:
+                            budas = "Mišrus"
+                            card_amt = round(max(0.0, float(payload.get("kortele_suma") or 0.0)), 2)
+                            rem = round(max(0.0, raw_total - card_amt), 2)
+                            cash_amt = _svc_round_5ct(rem) if (rounding_on and rem > 0) else rem
+                            paid_total = round(card_amt + cash_amt, 2)
+                            round_diff = round(cash_amt - rem, 2)
+                        elif "gryn" in bl:
+                            budas = "Grynais"
+                            paid_total = _svc_round_5ct(raw_total) if rounding_on else raw_total
+                            cash_amt = paid_total
+                            round_diff = round(paid_total - raw_total, 2)
+                        else:
+                            budas = "Kortele"
+                            paid_total = raw_total
+                            card_amt = raw_total
+                        chk["status"] = "apmoketas"
+                        chk["mokejimo_budas"] = budas
+                        now_dt = datetime.now()
+                        svc.setdefault("shift_payments", []).append({
+                            "ts": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+                            "date": now_dt.strftime("%Y-%m-%d"),
+                            "staff_id": user["id"], "staff_name": user["vardas"],
+                            "table_name": t["pavadinimas"], "check_name": chk["pavadinimas"],
+                            "method": budas, "raw_total": raw_total, "paid_total": paid_total,
+                            "cash_amount": cash_amt, "card_amount": card_amt, "rounding_diff": round_diff,
+                        })
+                        if len(svc["shift_payments"]) > 500:
+                            svc["shift_payments"] = svc["shift_payments"][-500:]
+                    closed_t = False
+                    if all(c.get("status") == "apmoketas" for c in t["checks"]):
+                        t["status"] = "laisvas"; t["atidare_id"] = ""; t["sveciu_sk"] = 0; t["opened_at"] = ""; t["checks"] = []
+                        closed_t = True
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({
+                        "zinute": f"{'Stalas uždarytas' if closed_t else 'Čekis apmokėtas'} ({paid_total:.2f} €, {budas}).",
+                        "table_closed": closed_t,
+                        "paid_total": paid_total,
+                        "stalas": _svc_serialize_table(t, smap),
+                    }, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/perleisti":
+                    t["padavejas_id"] = str(payload.get("target_staff_id") or "")
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({"zinute": "Stalas perleistas.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
 
         self._send(404, b'{"klaida":"Not found"}', "application/json")
 
