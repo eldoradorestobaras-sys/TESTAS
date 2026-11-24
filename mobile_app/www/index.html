@@ -422,6 +422,7 @@
             <button class="pin-key" style="background:rgba(255,179,0,0.16);color:#FFB300;box-shadow:0 0 14px rgba(255,179,0,0.22),inset 0 1px 0 rgba(255,179,0,0.35);" onclick="pinSubmit()">✓</button>
           </div>
           <div id="pinErr" style="font-size:12px;color:#FCA5A5;min-height:16px;"></div>
+          <div style="font-size:11px;color:var(--muted);text-align:center;">Numatytieji PIN: <b>0000</b> (Vadyb.) • <b>1111</b> / <b>2222</b></div>
         </div>
       </div>
 
@@ -1656,12 +1657,16 @@ async function pinSubmit() {
   if (!pinBuf) return;
   try {
     const res = await svcCall("/api/personalas/login", "POST", {pin: pinBuf});
+    if (!res || typeof res !== "object" || !res.user) {
+      throw new Error((res && res.klaida) || "Serveris negrąžino darbuotojo duomenų");
+    }
     waiterPin = pinBuf;
     sessionStorage.setItem("mi_waiter_pin", waiterPin);
     pinBuf = ""; updatePinDots();
     lastWaiterActivity = Date.now();
     await loadTablesState(false);
-    toast(`👋 Prisijungė: ${res.user.vardas}`);
+    const nm = (res.user && res.user.vardas) || (waiterState && waiterState.user && waiterState.user.vardas) || "Prisijungta";
+    toast(`👋 Prisijungė: ${nm}`);
   } catch (e) {
     document.getElementById("pinErr").textContent = e.message || "Neteisingas PIN";
     pinBuf = ""; updatePinDots();
@@ -1690,10 +1695,10 @@ async function loadTablesState(notify=false) {
     waiterState = js;
     document.getElementById("pinGate").style.display = "none";
     document.getElementById("tablesWorkspace").style.display = "flex";
-    const u = js.user || {};
+    const u = (js && js.user) || {};
     const icon = u.role === "vadybininkas" ? "👑" : "👤";
-    document.getElementById("waiterPill").textContent = `${icon} ${u.vardas || ""}`;
-    document.getElementById("tblUserLbl").textContent = `${icon} ${u.vardas} (${u.role === "vadybininkas" ? "Vadybininkas" : "Padavėjas"})`;
+    document.getElementById("waiterPill").textContent = `${icon} ${u.vardas || "Padavėjas"}`;
+    document.getElementById("tblUserLbl").textContent = `${icon} ${u.vardas || "Padavėjas"} (${u.role === "vadybininkas" ? "Vadybininkas" : "Padavėjas"})`;
     const wh = js.work_hours || {};
     document.getElementById("tblHoursLbl").textContent = wh.ijungta ? `🕒 ${wh.pradzia}–${wh.pabaiga}` : "🕒 Neribotas laikas";
     document.getElementById("btnMgrAdmin").style.display = (u.role === "vadybininkas") ? "inline-flex" : "none";
