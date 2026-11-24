@@ -1617,10 +1617,13 @@ async function svcCall(path, method="GET", body=null) {
   let lastErr = null;
   for (const base of bases) {
     try {
-      const r = await fetchTimeout(base + path, opts, 5000);
-      const js = await r.json().catch(() => ({}));
-      if (r.status === 404) {
-        lastErr = new Error("API nerastas (404)");
+      const ms = (base === cleanUrl(cfg.cloudUrl)) ? 15000 : 4000;
+      const r = await fetchTimeout(base + path, opts, ms);
+      const txt = await r.text();
+      let js = null;
+      try { js = JSON.parse(txt); } catch { js = null; }
+      if (r.status === 404 || !js || typeof js !== "object") {
+        lastErr = new Error(r.status === 404 ? "API nerastas (404)" : `Neteisingas serverio atsakymas (${base})`);
         continue;
       }
       if (!r.ok) {
