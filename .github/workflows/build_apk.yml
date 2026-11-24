@@ -30,8 +30,8 @@ jobs:
         run: |
           npm install
           npx cap add android
-          python3 -m pip install -q pillow
-          python3 -c '
+          python3 -m venv /tmp/pv && /tmp/pv/bin/pip install -q pillow
+          /tmp/pv/bin/python3 -c '
           import os
           from PIL import Image
           p = "android/app/src/main/AndroidManifest.xml"
