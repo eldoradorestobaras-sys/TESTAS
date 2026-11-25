@@ -9,6 +9,11 @@
 <link rel="icon" type="image/png" href="icon.png">
 <link rel="manifest" href="manifest.json">
 <title>Model MI • Kasa</title>
+<script>
+  if (new URLSearchParams(location.search).get('mobile') === '1') {
+    document.documentElement.classList.add('force-mobile');
+  }
+</script>
 <style>
   :root {
     --bg: #0B0D12;
@@ -139,7 +144,7 @@
   /* POS Layout */
   .pos-wrap { flex: 1; display: flex; flex-direction: column; width: 100%; height: 100%; overflow: hidden; }
   @media (min-width: 820px) {
-    .pos-wrap { flex-direction: row; }
+    html:not(.force-mobile) .pos-wrap { flex-direction: row; }
   }
   .menu-pane {
     flex: 1.45; display: flex; flex-direction: column; overflow: hidden; padding: 10px 12px 6px;
@@ -186,8 +191,12 @@
   }
   .promo-btn {
     font-size: 10.5px; font-weight: 800; padding: 2px 7px; border-radius: 6px; border: none;
-    background: rgba(255, 179, 0, 0.16); color: var(--amber); cursor: pointer;
-    box-shadow: 0 0 10px rgba(255, 179, 0, 0.22);
+    background: rgba(255, 255, 255, 0.06); color: var(--muted); cursor: pointer;
+    box-shadow: none; opacity: 0.7;
+  }
+  .promo-btn.active {
+    background: rgba(255, 179, 0, 0.18); color: var(--amber); opacity: 1;
+    box-shadow: 0 0 10px rgba(255, 179, 0, 0.35);
   }
   .dish-price { font-size: 14px; font-weight: 800; color: var(--amber); }
 
@@ -199,10 +208,14 @@
     max-height: 48dvh; flex-shrink: 0;
   }
   @media (min-width: 820px) {
-    .cart-pane {
+    html:not(.force-mobile) .cart-pane {
       width: 375px; max-height: 100%;
       box-shadow: -6px 0 28px rgba(0, 0, 0, 0.65);
     }
+  }
+  html.force-mobile body {
+    max-width: 430px; margin: 0 auto;
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.85);
   }
   .cart-head {
     display: flex; justify-content: space-between; align-items: center; margin-bottom: 7px;
@@ -391,10 +404,13 @@
   </div>
 
   <div class="tabs">
-    <button class="tab-btn active" onclick="switchTab('tables', this)">🪑 Stalai</button>
-    <button class="tab-btn" onclick="switchTab('pos', this)">💳 Touch Kasa</button>
-    <button class="tab-btn" onclick="switchTab('receipts', this)">🧾 Čekiai (<span id="recCnt">0</span>)</button>
-    <button class="tab-btn" onclick="switchTab('kds', this)">🍳 Gamyba (<span id="kdsCnt">0</span>)</button>
+    <button class="tab-btn active" onclick="switchTab('tables', this)">Stalai</button>
+    <button class="tab-btn" onclick="switchTab('pos', this)">💳 Kasa</button>
+    <button class="tab-btn" onclick="switchTab('receipts', this)">🧾 Čekiai<span id="recCnt"></span></button>
+    <button class="tab-btn" onclick="switchTab('kds', this)">🍳 Gamyba<span id="kdsCnt"></span></button>
+  </div>
+  <div id="lockCornerRow" style="display:none;justify-content:flex-end;padding:4px 12px 0;flex-shrink:0;">
+    <button class="btn" style="padding:5px 10px;font-size:13px;" title="Užrakinti" onclick="lockWaiter()">🔒</button>
   </div>
 
   <div class="views">
@@ -419,10 +435,9 @@
             <button class="pin-key" onclick="pinPress('9')">9</button>
             <button class="pin-key" style="color:#FF5252;background:rgba(255,82,82,0.08);" onclick="pinClear()">C</button>
             <button class="pin-key" onclick="pinPress('0')">0</button>
-            <button class="pin-key" style="background:rgba(255,179,0,0.16);color:#FFB300;box-shadow:0 0 14px rgba(255,179,0,0.22),inset 0 1px 0 rgba(255,179,0,0.35);" onclick="pinSubmit()">✓</button>
+            <button class="pin-key" style="background:rgba(34,197,94,0.24);color:#FFFFFF;box-shadow:0 0 14px rgba(34,197,94,0.25),inset 0 1px 0 rgba(34,197,94,0.35);" onclick="pinSubmit()">✓</button>
           </div>
           <div id="pinErr" style="font-size:12px;color:#FCA5A5;min-height:16px;"></div>
-          <div style="font-size:11px;color:var(--muted);text-align:center;">Numatytieji PIN: <b>0000</b> (Vadyb.) • <b>1111</b> / <b>2222</b></div>
         </div>
       </div>
 
@@ -436,7 +451,6 @@
             <button class="btn" style="padding:6px 10px;font-size:12px;" onclick="openShiftModal()">📊 Pamaina</button>
             <button id="btnMgrAdmin" class="btn" style="padding:6px 10px;font-size:12px;display:none;" onclick="openMgrModal()">👥 Personalas / Stalai</button>
             <button class="btn" style="padding:6px 10px;font-size:12px;" onclick="loadTablesState(true)">🔄</button>
-            <button class="btn" style="padding:6px 10px;font-size:12px;" onclick="lockWaiter()">🔒 Užrakinti</button>
           </div>
         </div>
         <div id="afterHoursBanner" class="after-banner" style="display:none;"></div>
@@ -445,74 +459,57 @@
         <div id="tablesGrid" class="tables-grid"></div>
 
         <!-- AKTYVAUS STALO UŽSAKYMAS -->
-        <div id="tableDetail" class="pos-wrap" style="display:none;flex:1;min-height:0;">
-          <div class="menu-pane">
+        <div id="tableDetail" class="pos-wrap" style="display:none;flex:1 1 0;min-height:0;flex-direction:column;">
+          <div class="menu-pane" style="flex:1 1 0;min-height:0;">
             <div class="search-row">
               <button class="btn" style="padding:8px 12px;" onclick="backToTables()">← Stalai</button>
               <input id="inpTblSearch" class="inp" placeholder="🔍 Pridėti patiekalą į stalą..." oninput="renderTableMenu()">
-              <button class="btn" style="padding:8px 10px;font-size:12px;white-space:nowrap;" title="Įkelti meniu iš Model MI" onclick="syncRemoteData(true)">📥 Iš Model MI</button>
+              <button class="btn btn-sync-prog" style="padding:8px 10px;font-size:12px;white-space:nowrap;" title="Įkelti meniu iš programos" onclick="syncRemoteData(true)">📥 Iš programos</button>
             </div>
             <div id="tblCatsRow" class="cats"></div>
             <div id="tblMenuGrid" class="menu-grid"></div>
           </div>
 
-          <div class="cart-pane">
-            <div class="cart-head">
-              <div>
-                <b id="tdTitle" style="font-size:15px;">Stalas</b>
-                <div id="tdMeta" style="font-size:11px;color:var(--muted);"></div>
-              </div>
-              <div style="display:flex;gap:6px;align-items:center;">
-                <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="openTransferModal()">🔁 Perleisti</button>
-                <span id="tdTotal" style="color:var(--amber);font-size:16px;font-weight:800;">0.00 €</span>
-              </div>
+          <div id="tblSummaryBar" onclick="openTableOrderModal()" style="display:flex;flex:0 0 46px;height:46px;min-height:46px;max-height:46px;margin:0 12px 10px;padding:0 14px;border-radius:12px;background:rgba(255,179,0,0.16);box-shadow:var(--glow-amber);cursor:pointer;align-items:center;justify-content:space-between;gap:12px;">
+            <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+              <button id="tblBarClearBtn" type="button" class="x-del" style="font-size:20px;line-height:1;padding:2px 4px;flex-shrink:0;" title="Išvalyti krepšelį" onclick="event.stopPropagation();clearTableDrafts()">&times;</button>
+              <span id="tblBarCount" style="background:var(--amber);color:#0B0D12;font-weight:900;font-size:13px;padding:3px 9px;border-radius:999px;flex-shrink:0;">0 vnt.</span>
+              <b id="tblBarTitle" style="font-size:13.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Stalas</b>
             </div>
-
-            <div id="tdCheckTabs" class="chk-tabs"></div>
-            <div id="tdItems" class="cart-items"></div>
-            <input id="inpTblNote" class="inp" style="padding:8px 10px;font-size:13px;" placeholder="📝 Bendras komentaras virtuvei...">
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-              <button class="btn btn-amber" onclick="sendTableToKitchen()">🍳 Siųsti į virtuvę</button>
-              <button class="btn" onclick="openSplitModal()">Padalinti užsakymą</button>
-            </div>
-            <div class="pay-row" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-              <button class="btn" style="padding:8px 6px;font-size:12.5px;" onclick="sendPrecheck()">🧾 Sąskaita</button>
-              <button class="btn btn-green" style="padding:8px 6px;font-size:12.5px;" onclick="payTableCheck('Kortele')">💳 Kortele</button>
-              <button class="btn btn-amber" style="padding:8px 6px;font-size:12.5px;" onclick="openPayModal('Grynais')">💵 Grynais</button>
-              <button class="btn" style="padding:8px 6px;font-size:12.5px;" onclick="openPayModal('Mišrus')">🔀 Mišrus</button>
+            <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+              <span id="tdTotal" style="color:var(--amber);font-size:17px;font-weight:900;">0.00 €</span>
+              <span style="color:var(--amber);font-size:16px;font-weight:900;">›</span>
             </div>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- TOUCH KASA -->
+    <!-- KASA -->
     <div id="view-pos" class="view">
-      <div class="pos-wrap">
-        <div class="menu-pane">
+      <div class="pos-wrap" style="flex-direction:column;">
+        <div class="menu-pane" style="flex:1 1 0;min-height:0;">
           <div class="search-row">
-            <input id="inpSearch" class="inp" placeholder="🔍 Ieškoti patiekalo arba PLU..." oninput="renderMenu()">
-            <button class="btn" style="padding:8px 10px;font-size:12px;white-space:nowrap;" title="Įkelti meniu iš Model MI" onclick="syncRemoteData(true)">📥 Iš Model MI</button>
+            <input id="inpSearch" class="inp" placeholder="🔍 Ieškoti patiekalo ar produkto..." oninput="renderMenu()">
+            <button class="btn btn-sync-prog" style="padding:8px 10px;font-size:12px;white-space:nowrap;" title="Įkelti meniu iš programos" onclick="syncRemoteData(true)">📥 Iš programos</button>
+          </div>
+          <div style="display:flex;gap:6px;margin-bottom:6px;flex-shrink:0;">
+            <button id="posSubDishes" class="cat-chip active" style="flex:1;text-align:center;" onclick="setPosSubTab('dishes')">🍽️ Patiekalai</button>
+            <button id="posSubProducts" class="cat-chip" style="flex:1;text-align:center;" onclick="setPosSubTab('products')">📦 Produktai</button>
           </div>
           <div id="catsRow" class="cats"></div>
           <div id="menuGrid" class="menu-grid"></div>
         </div>
 
-        <div class="cart-pane">
-          <div class="cart-head">
-            <span>KREPŠELIS</span>
-            <div style="display:flex;align-items:center;gap:8px;">
-              <input id="inpOrderDisc" type="number" min="0" max="100" step="5" placeholder="Nuol. %" style="width:74px;padding:4px 7px;font-size:12px;" class="inp" oninput="renderCart()">
-              <span id="cartTotal" style="color:var(--amber);font-size:16px;">0.00 €</span>
-            </div>
+        <div id="cartSummaryBar" onclick="openPosOrderModal()" style="display:none;flex:0 0 46px;height:46px;min-height:46px;max-height:46px;margin:0 12px 10px;padding:0 14px;border-radius:12px;background:rgba(255,179,0,0.16);box-shadow:var(--glow-amber);cursor:pointer;align-items:center;justify-content:space-between;gap:12px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button id="posBarClearBtn" type="button" class="x-del" style="font-size:20px;line-height:1;padding:2px 4px;flex-shrink:0;" title="Išvalyti krepšelį" onclick="event.stopPropagation();cancelPosOrder()">&times;</button>
+            <span id="cartBarCount" style="background:var(--amber);color:#0B0D12;font-weight:900;font-size:13px;padding:3px 9px;border-radius:999px;">0 vnt.</span>
+            <span style="font-size:13.5px;font-weight:800;color:var(--text);">Užsakymas</span>
           </div>
-          <div id="cartItems" class="cart-items"></div>
-          <input id="inpNote" class="inp" style="padding:8px 10px;font-size:13px;" placeholder="📝 Bendras komentaras virtuvei...">
-          <div class="pay-row">
-            <button class="btn btn-green" onclick="sendOrder('kortele')">💳 KORTELE</button>
-            <button class="btn btn-amber" onclick="sendOrder('grynais')">💵 GRYNAIS</button>
-            <button class="btn btn-red" title="Nurašyti (brokas)" onclick="writeOffCart()">🗑️</button>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span id="cartTotal" style="color:var(--amber);font-size:17px;font-weight:900;">0.00 €</span>
+            <span style="color:var(--amber);font-size:16px;font-weight:900;">›</span>
           </div>
         </div>
       </div>
@@ -535,7 +532,7 @@
 </div>
 
 <!-- MODIFIKATORIŲ IR NUOLAIDOS MODALAS -->
-<div id="modModal" class="modal-bg" onclick="if(event.target===this)closeModModal()">
+<div id="modModal" class="modal-bg" style="z-index:70;" onclick="if(event.target===this)closeModModal()">
   <div class="modal">
     <div class="row-between">
       <h3 id="modTitle">⚙️ Modifikatoriai</h3>
@@ -626,6 +623,23 @@
   </div>
 </div>
 
+<!-- RYŠIO NUSTATYMŲ 6 SKAITMENŲ KODO MODALAS -->
+<div id="settingsPinModal" class="modal-bg" style="z-index:80;" onclick="if(event.target===this)closeSettingsPin()">
+  <div class="modal" style="max-width:340px;">
+    <div class="row-between">
+      <h3>🔐 Ryšio nustatymai</h3>
+      <button class="x-close" onclick="closeSettingsPin()">&times;</button>
+    </div>
+    <div style="font-size:12.5px;color:var(--muted);">Įveskite Model MI 6 simbolių kodą:</div>
+    <input id="inpSettingsPin" type="password" maxlength="6" class="inp" placeholder="••••••" onkeydown="if(event.key==='Enter')verifySettingsPin()">
+    <div id="settingsPinErr" style="font-size:12px;color:#FCA5A5;min-height:14px;"></div>
+    <div style="display:flex;justify-content:space-between;gap:10px;">
+      <button class="btn" style="flex:1;" onclick="closeSettingsPin()">Atšaukti</button>
+      <button class="btn btn-amber" style="flex:1;" onclick="verifySettingsPin()">Atidaryti</button>
+    </div>
+  </div>
+</div>
+
 <!-- NUSTATYMŲ MODALAS -->
 <div id="cfgModal" class="modal-bg" onclick="if(event.target===this)closeSettings()">
   <div class="modal">
@@ -664,7 +678,7 @@
 </div>
 
 <!-- UŽSAKYMO PADALINIMO MODALAS -->
-<div id="splitModal" class="modal-bg" onclick="if(event.target===this)closeSplitModal()">
+<div id="splitModal" class="modal-bg" style="z-index:75;" onclick="if(event.target===this)closeSplitModal()">
   <div class="modal">
     <div class="row-between">
       <h3>Padalinti sąskaitą</h3>
@@ -685,29 +699,128 @@
 </div>
 
 <!-- ANULIAVIMO (VOID) MODALAS -->
-<div id="voidModal" class="modal-bg" onclick="if(event.target===this)closeVoidModal()">
-  <div class="modal">
+<div id="voidModal" class="modal-bg" style="z-index:75;" onclick="if(event.target===this)closeVoidModal()">
+  <div class="modal" style="max-width:360px;">
     <div class="row-between">
-      <h3>🛑 Anuliuoti išsiųstą poziciją</h3>
-      <button class="btn" style="padding:6px 10px;" onclick="closeVoidModal()">✕</button>
+      <h3>Anuliuoti poziciją?</h3>
+      <button class="x-close" onclick="closeVoidModal()">&times;</button>
     </div>
-    <div id="voidItemLbl" style="font-size:13px;font-weight:700;"></div>
-    <div>
+    <div id="voidItemLbl" style="font-size:13.5px;font-weight:700;"></div>
+    <div id="voidReasonWrap">
       <span class="field-lbl">Priežastis</span>
       <input id="voidReason" class="inp" placeholder="Pvz.: Svečias persigalvojo / Virtuvė suklydo">
     </div>
-    <div>
+    <div id="voidMgrPinWrap">
       <span class="field-lbl">Vadybininko PIN kodas</span>
       <input id="voidMgrPin" type="password" inputmode="numeric" class="inp" placeholder="0000">
     </div>
-    <div style="display:flex;justify-content:flex-end;">
-      <button class="btn btn-red" style="padding:8px 16px;font-size:12.5px;" onclick="confirmVoidItem()">✓ Anuliuoti ir grąžinti likutį</button>
+    <div style="display:flex;justify-content:space-between;gap:10px;margin-top:4px;">
+      <button class="btn" style="flex:1;" onclick="closeVoidModal()">Atšaukti</button>
+      <button class="btn btn-red" style="flex:1.2;font-size:12.5px;" onclick="confirmVoidItem()">✓ Taip, anuliuoti</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOUCH KASOS UŽSAKYMO MODALAS -->
+<div id="posOrderModal" class="modal-bg" onclick="if(event.target===this)closePosOrderModal()">
+  <div class="modal" style="max-width:410px;">
+    <div class="row-between">
+      <div>
+        <h3>Užsakymas</h3>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;">
+        <select id="posTargetTable" class="inp" style="width:auto;max-width:125px;padding:4px 8px;font-size:12px;" onchange="onPosTableChange()" title="Priskirti stalui">
+          <option value="">Be stalo</option>
+        </select>
+        <input id="inpOrderDisc" type="number" min="0" max="100" step="5" placeholder="Nuol. %" style="width:66px;padding:4px 7px;font-size:12px;" class="inp" oninput="renderCart()">
+        <button class="x-close" onclick="closePosOrderModal()">&times;</button>
+      </div>
+    </div>
+    <div id="cartItems" class="cart-items" style="max-height:46dvh;margin-bottom:2px;"></div>
+    <div id="orderModalTotalRow" style="display:flex;justify-content:flex-end;padding:0 10px 2px;">
+      <b id="orderModalTotal" style="font-size:17px;color:var(--amber);">0.00 €</b>
+    </div>
+    <input id="inpNote" class="inp" style="padding:8px 10px;font-size:13px;display:none;" placeholder="📝 Bendras komentaras virtuvei...">
+    <div id="posKitchenRow" style="display:none;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="btn btn-red" style="padding:9px 8px;font-size:12.5px;" onclick="cancelPosOrder()">Atšaukti</button>
+      <button id="btnSendPosKitchen" class="btn btn-amber" style="padding:9px 8px;font-size:12.5px;" onclick="sendPosToKitchen()">🍳 Siųsti į virtuvę</button>
+    </div>
+    <div id="posPayRow" style="display:flex;justify-content:space-between;gap:12px;">
+      <button id="btnCancelPosDirect" class="btn btn-red" style="flex:0 0 42%;" onclick="cancelPosOrder()">Atšaukti</button>
+      <button id="btnOpenPosPay" class="btn btn-green" style="flex:0 0 42%;" onclick="openPosPayModal()">Apmokėti • 0.00 €</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOUCH KASOS APMOKĖJIMO MODALAS -->
+<div id="posPayModal" class="modal-bg" style="z-index:70;" onclick="if(event.target===this)closePosPayModal()">
+  <div class="modal" style="max-width:360px;">
+    <div class="row-between">
+      <h3>Apmokėjimas</h3>
+      <button class="x-close" onclick="closePosPayModal()">&times;</button>
+    </div>
+    <div style="text-align:center;padding:8px 0;">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;">MOKĖTINA SUMA</div>
+      <div id="posPayTotal" style="font-size:28px;font-weight:900;color:var(--amber);margin-top:2px;">0.00 €</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="confirmPosPay('kortele')">💳 Kortele</button>
+      <button class="btn btn-amber" style="padding:14px;font-size:15px;" onclick="confirmPosPay('grynais')">💵 Grynais</button>
+      <button class="btn" style="padding:10px;font-size:13px;" onclick="closePosPayModal()">Atgal</button>
+    </div>
+  </div>
+</div>
+
+<!-- STALO UŽSAKYMO MODALAS -->
+<div id="tableOrderModal" class="modal-bg" onclick="if(event.target===this)closeTableOrderModal()">
+  <div class="modal" style="max-width:420px;">
+    <div class="row-between">
+      <div>
+        <b id="tdTitle" style="font-size:15px;">Stalas</b>
+        <div id="tdMeta" style="font-size:11px;color:var(--muted);"></div>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="openTransferModal()">🔁 Perleisti</button>
+        <button class="x-close" onclick="closeTableOrderModal()">&times;</button>
+      </div>
+    </div>
+    <div id="tdCheckTabs" class="chk-tabs"></div>
+    <div id="tdItems" class="cart-items" style="max-height:42dvh;margin-bottom:4px;"></div>
+    <input id="inpTblNote" class="inp" style="padding:8px 10px;font-size:13px;" placeholder="📝 Bendras komentaras virtuvei...">
+    <div id="tblDraftActions" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+      <button class="btn btn-red" style="padding:9px 8px;font-size:12.5px;" onclick="clearTableDrafts();closeTableOrderModal();">Atšaukti</button>
+      <button class="btn btn-amber" style="padding:9px 8px;font-size:12.5px;" onclick="sendTableToKitchen()">🍳 Siųsti į virtuvę</button>
+    </div>
+    <div id="tblSentActions" style="display:none;justify-content:space-between;gap:12px;">
+      <button class="btn" style="flex:0 0 42%;" onclick="openSplitModal()">Padalinti</button>
+      <button id="btnOpenTblPay" class="btn btn-green" style="flex:0 0 42%;" onclick="openTablePaySelectModal()">Apmokėti • 0.00 €</button>
+    </div>
+  </div>
+</div>
+
+<!-- STALO APMOKĖJIMO PASIRINKIMO MODALAS -->
+<div id="tablePaySelectModal" class="modal-bg" style="z-index:70;" onclick="if(event.target===this)closeTablePaySelectModal()">
+  <div class="modal" style="max-width:360px;">
+    <div class="row-between">
+      <h3>Stalo apmokėjimas</h3>
+      <button class="x-close" onclick="closeTablePaySelectModal()">&times;</button>
+    </div>
+    <div style="text-align:center;padding:6px 0;">
+      <div style="font-size:12px;color:var(--muted);font-weight:700;">MOKĖTINA SUMA</div>
+      <div id="tblPaySelectTotal" style="font-size:28px;font-weight:900;color:var(--amber);margin-top:2px;">0.00 €</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      <button class="btn btn-green" style="padding:13px;font-size:15px;" onclick="payTableCheck('Kortele')">💳 Kortele</button>
+      <button class="btn btn-amber" style="padding:13px;font-size:15px;" onclick="closeTablePaySelectModal();openPayModal('Grynais')">💵 Grynais</button>
+      <button class="btn" style="padding:11px;font-size:14px;" onclick="closeTablePaySelectModal();openPayModal('Mišrus')">🔀 Mišrus</button>
+      <button class="btn" style="padding:10px;font-size:13px;" onclick="sendPrecheck()">🧾 Sąskaita (išankstinė)</button>
+      <button class="btn" style="padding:9px;font-size:13px;" onclick="closeTablePaySelectModal()">Atgal</button>
     </div>
   </div>
 </div>
 
 <!-- STALO PERLEIDIMO MODALAS -->
-<div id="transferModal" class="modal-bg" onclick="if(event.target===this)closeTransferModal()">
+<div id="transferModal" class="modal-bg" style="z-index:75;" onclick="if(event.target===this)closeTransferModal()">
   <div class="modal">
     <div class="row-between">
       <h3>🔁 Perleisti stalą kitam padavėjui</h3>
@@ -750,7 +863,7 @@
 </div>
 
 <!-- GRYNŲJŲ / MIŠRAUS APMOKĖJIMO IR GRĄŽOS MODALAS -->
-<div id="payModal" class="modal-bg" onclick="if(event.target===this)closePayModal()">
+<div id="payModal" class="modal-bg" style="z-index:75;" onclick="if(event.target===this)closePayModal()">
   <div class="modal">
     <div class="row-between">
       <h3 id="payModalTitle">💵 Apmokėjimas grynaisiais</h3>
@@ -903,10 +1016,11 @@ async function checkEndpoint(baseUrl, ms=2500) {
 }
 
 async function checkConnections(notify=false) {
+  const prevCh = activeChannel;
   const pill = document.getElementById("statusPill");
   let ch = "off";
   if (cfg.mode !== "lan") {
-    const c = await checkEndpoint(cfg.cloudUrl, 2800);
+    const c = await checkEndpoint(_effectiveCloudUrl(), 2800);
     if (c.ok) ch = "cloud";
   }
   if (ch === "off" && cfg.mode !== "cloud") {
@@ -918,13 +1032,26 @@ async function checkConnections(notify=false) {
   const qTxt = offlineQueue.length ? ` • Eilėje: ${offlineQueue.length}` : "";
   pill.textContent = (ch === "cloud" ? "☁️ Cloud" : ch === "lan" ? "🏠 LAN" : "📴 Offline") + qTxt;
   if (notify) toast(`Ryšys: ${pill.textContent}`);
+  else if (prevCh !== ch) {
+    if (ch === "off") toast("⚠️ Ryšio gedimas: nepasiekiamas nei Cloud, nei LAN!", true);
+    else if (prevCh === "cloud" && ch === "lan") toast("⚠️ Cloud neatsako — perjungta į LAN!", true);
+    else if (prevCh === "lan" && ch === "cloud") toast("☁️ Cloud atkurtas — grįžta į Cloud!");
+  }
+  loadKDS();
   if (ch !== "off" && offlineQueue.length) flushQueue();
+}
+
+function _effectiveCloudUrl() {
+  if ((location.protocol === "http:" || location.protocol === "https:") && location.port === "8090") {
+    return cleanUrl(location.origin);
+  }
+  return cleanUrl(cfg.cloudUrl);
 }
 
 async function postWithFailover(path, payload) {
   const order = cfg.mode === "cloud" ? ["cloud"] : cfg.mode === "lan" ? ["lan"] : ["cloud", "lan"];
   for (const ch of order) {
-    const base = cleanUrl(ch === "cloud" ? cfg.cloudUrl : cfg.lanUrl);
+    const base = ch === "cloud" ? _effectiveCloudUrl() : cleanUrl(cfg.lanUrl);
     if (!base) continue;
     try {
       const res = await fetchTimeout(base + path, {
@@ -957,8 +1084,54 @@ function switchTab(name, btn) {
   if (name === "kds") loadKDS();
 }
 
+let posSubTab = "dishes";
+async function setPosSubTab(tab) {
+  posSubTab = tab;
+  document.getElementById("posSubDishes")?.classList.toggle("active", tab === "dishes");
+  document.getElementById("posSubProducts")?.classList.toggle("active", tab === "products");
+  const catsEl = document.getElementById("catsRow");
+  if (catsEl) catsEl.style.display = tab === "dishes" ? "flex" : "none";
+  if (tab === "products") {
+    const lan = cleanUrl(cfg.lanUrl);
+    if (lan) {
+      try {
+        const rs = await fetchTimeout(lan + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000);
+        if (rs.ok) {
+          const jss = await rs.json();
+          if (Array.isArray(jss.sandelis)) {
+            sandelisItems = jss.sandelis;
+            localStorage.setItem("mi_app_sandelis", JSON.stringify(sandelisItems));
+          }
+        }
+      } catch {}
+    }
+  }
+  renderMenu();
+}
+
 function renderMenu() {
   const q = document.getElementById("inpSearch").value.trim().toLowerCase();
+  if (posSubTab === "products") {
+    const prods = (sandelisItems || []).filter(p => !q || String(p.pavadinimas || "").toLowerCase().includes(q));
+    document.getElementById("menuGrid").innerHTML = prods.map(p => {
+      const idx = sandelisItems.indexOf(p);
+      const rawName = String(p.pavadinimas || "");
+      const dispName = rawName.replace(/_{1,2}(l|vnt|kg|g|ml)$/i, "").trim();
+      const vnt = /_{1,2}l$/i.test(rawName) ? "l" : (/_{1,2}vnt$/i.test(rawName) ? "vnt" : String(p.mat_vnt || "vnt").trim());
+      const inCart = cart.find(c => c.is_sandelis && c.pavadinimas === dispName);
+      const qTxt = inCart ? `${inCart.kiekis}${inCart.disp_vnt || ''}` : "";
+      return `
+        <div class="dish-card" onclick="addProductToCart(sandelisItems[${idx}])">
+          ${qTxt ? `<div class="dish-top" style="justify-content:flex-end;"><span style="background:var(--amber);color:#0B0D12;font-weight:900;font-size:11px;padding:1px 7px;border-radius:999px;">${qTxt}</span></div>` : ''}
+          <div class="dish-name">${dispName}</div>
+          <div class="row-between">
+            <span style="font-size:11px;color:var(--muted);">${Number(p.kiekis || 0).toFixed(2)} ${vnt}</span>
+            <span class="dish-price">${Number(p.kaina || 0).toFixed(2)} €/${vnt}</span>
+          </div>
+        </div>`;
+    }).join("") || `<div style="color:var(--muted);padding:12px;">Sandėlio produktų nerasta.</div>`;
+    return;
+  }
   const cats = ["Visi", ...new Set(menu.map(m => m.kat || "Patiekalai"))];
   document.getElementById("catsRow").innerHTML = cats.map(c =>
     `<div class="cat-chip ${c===activeCat?'active':''}" onclick="activeCat='${c.replace(/'/g,"\\'")}';renderMenu()">${c}</div>`
@@ -974,11 +1147,15 @@ function renderMenu() {
     const zm = getZoneMeta(m.zona);
     const akc = Number(m.akcija_proc || 0);
     const kEff = akc > 0 ? Math.max(0, Number(m.kaina) * (1 - akc / 100)) : Number(m.kaina);
+    const inCartQty = cart.reduce((s, c) => s + (c.pavadinimas === m.pavadinimas ? c.kiekis : 0), 0);
     return `
       <div class="dish-card" onclick="addToCart(menu[${idx}])">
         <div class="dish-top">
           <span class="zone-badge" style="color:${zm.spalva};text-shadow:0 0 10px ${zm.spalva}88;">${zm.kodas}</span>
-          <button class="promo-btn" onclick="event.stopPropagation();openTilePromo(${idx})">${akc>0 ? '-'+akc+'%' : '🏷️'}</button>
+          <div style="display:flex;align-items:center;gap:5px;">
+            ${inCartQty > 0 ? `<span style="background:var(--amber);color:#0B0D12;font-weight:900;font-size:11px;padding:1px 7px;border-radius:999px;">×${inCartQty}</span>` : ''}
+            <button class="promo-btn ${akc>0?'active':''}" onclick="event.stopPropagation();openTilePromo(${idx})">${akc>0 ? '-'+akc+'%' : '🏷️'}</button>
+          </div>
         </div>
         <div class="dish-name">${m.pavadinimas}</div>
         <div class="row-between">
@@ -989,8 +1166,12 @@ function renderMenu() {
   }).join("") || `<div style="color:var(--muted);padding:12px;">Patiekalų nerasta.</div>`;
 }
 
+let posOrderSentToKitchen = false;
+let posActiveKitchenCekis = null;
+
 /* 1 paspaudimas = +1 porcija tiesiai į krepšelį */
 function addToCart(it, qty=1) {
+  posOrderSentToKitchen = false;
   const hasMods = c => (c.neideti.length || c.pakeisti.length || c.priedai.length || c.nuolaida_proc > 0);
   const ex = cart.find(c => c.pavadinimas === it.pavadinimas && !hasMods(c));
   const akcP = Number(it.akcija_proc || 0);
@@ -1012,7 +1193,65 @@ function addToCart(it, qty=1) {
   renderCart();
 }
 
+function addProductToCart(p) {
+  if (!p) return;
+  posOrderSentToKitchen = false;
+  const rawName = String(p.pavadinimas || "");
+  const dispName = rawName.replace(/_{1,2}(l|vnt|kg|g|ml)$/i, "").trim();
+  const origVnt = /_{1,2}l$/i.test(rawName) ? "l" : (/_{1,2}vnt$/i.test(rawName) ? "vnt" : String(p.mat_vnt || "vnt").trim().toLowerCase());
+  const isScaled = (origVnt === "kg" || origVnt === "l");
+  const dispVnt = origVnt === "kg" ? "g" : (origVnt === "l" ? "ml" : origVnt);
+  const defQty = (dispVnt === "g" || dispVnt === "ml") ? 100 : 1;
+  const unitPrice = isScaled ? (Number(p.kaina || 0) / 1000.0) : Number(p.kaina || 0);
+  const ex = cart.find(c => c.is_sandelis && c.pavadinimas === dispName);
+  if (ex) ex.kiekis += defQty;
+  else cart.push({
+    plu: "",
+    pavadinimas: dispName,
+    zona: "sandelis",
+    is_sandelis: true,
+    orig_vnt: origVnt,
+    disp_vnt: dispVnt,
+    kiekis: defQty,
+    kaina: unitPrice,
+    ingredientai: [],
+    ingredientai_info: [],
+    neideti: [],
+    pakeisti: [],
+    priedai: [],
+    nuolaida_proc: 0,
+    akcija: ""
+  });
+  renderCart();
+}
+
+function setCartQtyLive(idx, val) {
+  const n = Math.max(0, Number(val || 0));
+  if (!cart[idx]) return;
+  cart[idx].kiekis = n;
+  const lineSum = n * calcItemUnit(cart[idx]);
+  const lineEl = document.getElementById("cartLineTot_" + idx);
+  if (lineEl) lineEl.textContent = lineSum.toFixed(2) + " €";
+  const tot = cart.reduce((s, c) => s + Number(c.kiekis || 0) * calcItemUnit(c), 0);
+  const sumStr = tot.toFixed(2) + " €";
+  const barCnt = document.getElementById("cartBarCount");
+  if (barCnt) barCnt.textContent = `${cart.length} vnt.`;
+  document.getElementById("cartTotal").textContent = sumStr;
+  const mTot = document.getElementById("orderModalTotal");
+  if (mTot) mTot.textContent = sumStr;
+  const payBtn = document.getElementById("btnOpenPosPay");
+  if (payBtn) payBtn.textContent = `Apmokėti • ${sumStr}`;
+}
+
+function setCartQty(idx, val) {
+  const n = Math.max(0, Number(val || 0));
+  if (n <= 0) cart.splice(idx, 1);
+  else cart[idx].kiekis = n;
+  renderCart();
+}
+
 function chQty(idx, d) {
+  posOrderSentToKitchen = false;
   cart[idx].kiekis += d;
   if (cart[idx].kiekis <= 0) cart.splice(idx, 1);
   renderCart();
@@ -1027,10 +1266,19 @@ function calcItemUnit(c) {
 }
 
 function renderCart() {
+  const bar = document.getElementById("cartSummaryBar");
   const box = document.getElementById("cartItems");
+  const totalQty = cart.reduce((s, c) => s + (c.is_sandelis ? 1 : Number(c.kiekis || 0)), 0);
   if (!cart.length) {
-    box.innerHTML = `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0;">Krepšelis tuščias – spauskite ant patiekalo</div>`;
+    if (bar) bar.style.display = "none";
+    if (box) box.innerHTML = `<div style="color:var(--muted);font-size:12.5px;text-align:center;padding:14px 0;">Užsakymas tuščias</div>`;
     document.getElementById("cartTotal").textContent = "0.00 €";
+    const mTot = document.getElementById("orderModalTotal");
+    if (mTot) mTot.textContent = "0.00 €";
+    const payBtn = document.getElementById("btnOpenPosPay");
+    if (payBtn) payBtn.textContent = "Apmokėti • 0.00 €";
+    closePosOrderModal();
+    renderMenu();
     return;
   }
   let sum = 0;
@@ -1038,35 +1286,240 @@ function renderCart() {
     const uPrice = calcItemUnit(c);
     sum += c.kiekis * uPrice;
     const zm = getZoneMeta(c.zona);
-    const badges = [
-      ...(c.neideti || []).map(x => `<span class="mod-badge mb-no">BE: ${x}</span>`),
-      ...(c.pakeisti || []).map(x => `<span class="mod-badge mb-rep">${x.orig} → ${x.naujas}${x.kaina>0?' (+'+x.kaina.toFixed(2)+'€)':''}</span>`),
-      ...(c.priedai || []).map(x => `<span class="mod-badge mb-add">+ ${x.pavadinimas}${x.kaina>0?' (+'+x.kaina.toFixed(2)+'€)':''}</span>`),
-      ...(c.nuolaida_proc > 0 ? [`<span class="mod-badge mb-disc">-${c.nuolaida_proc}% ${c.akcija||''}</span>`] : [])
-    ].join("");
+    const hasMods = (c.neideti?.length || c.pakeisti?.length || c.priedai?.length || c.nuolaida_proc > 0);
     return `
-      <div class="cart-row">
-        <div class="row-between">
-          <div style="flex:1;min-width:0;">
-            <div style="font-weight:700;font-size:13px;">
-              <span style="color:${zm.spalva};font-weight:900;">[${zm.kodas}]</span> ${c.pavadinimas}
+      <div class="cart-row" style="padding:8px 10px;gap:0;">
+        <div class="row-between" style="gap:8px;">
+          <div style="flex:1;min-width:0;cursor:pointer;" onclick="openModModal(${i})" title="Spauskite modifikuoti arba pritaikyti nuolaidą">
+            <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+              ${c.is_sandelis ? "" : `<span style="color:${zm.spalva};font-weight:900;margin-right:4px;">${zm.kodas}</span>`}${String(c.pavadinimas || "").replace(/_{1,2}(l|vnt|kg|g|ml)$/i, "").trim()}
+              ${hasMods ? `<span style="color:var(--amber);font-size:11px;margin-left:4px;">●</span>` : ""}
             </div>
-            <div style="font-size:11.5px;color:var(--muted);">${uPrice.toFixed(2)} € × ${c.kiekis} = <b style="color:var(--amber);">${(c.kiekis*uPrice).toFixed(2)} €</b></div>
-            ${badges ? `<div>${badges}</div>` : ""}
           </div>
-          <div class="qty-ctrl">
-            <button class="q-btn" onclick="chQty(${i},-1)">−</button>
-            <b style="min-width:20px;text-align:center;">${c.kiekis}</b>
-            <button class="q-btn" onclick="chQty(${i},1)">+</button>
+          <div class="qty-ctrl" style="flex-shrink:0;">
+            ${c.is_sandelis
+              ? `<input type="number" min="0" step="any" value="${c.kiekis}" oninput="setCartQtyLive(${i}, this.value)" onchange="setCartQty(${i}, this.value)" style="width:60px;padding:4px 6px;font-size:13px;text-align:center;-moz-appearance:textfield;" class="inp"><span style="font-size:12px;color:var(--muted);font-weight:700;">${c.disp_vnt || 'vnt'}</span>`
+              : `<button class="q-btn" onclick="chQty(${i},-1)">−</button>
+                 <b style="min-width:20px;text-align:center;font-size:13px;">${c.kiekis}</b>
+                 <button class="q-btn" onclick="chQty(${i},1)">+</button>`
+            }
           </div>
-        </div>
-        <div class="pay-row" style="margin-top:0;">
-          <button class="btn" style="flex:1;padding:6px 8px;font-size:11.5px;" onclick="openModModal(${i})">⚙️ Modifikuoti</button>
-          <button class="btn" style="flex:1;padding:6px 8px;font-size:11.5px;color:var(--amber);" onclick="openModModal(${i}, true)">🏷️ Akcija</button>
+          <b id="cartLineTot_${i}" style="min-width:58px;text-align:right;color:var(--amber);font-size:13px;flex-shrink:0;">${(c.kiekis*uPrice).toFixed(2)} €</b>
         </div>
       </div>`;
   }).join("");
-  document.getElementById("cartTotal").textContent = sum.toFixed(2) + " €";
+  const sumStr = sum.toFixed(2) + " €";
+  if (bar) bar.style.display = "flex";
+  const barCnt = document.getElementById("cartBarCount");
+  if (barCnt) barCnt.textContent = `${totalQty} vnt.`;
+  document.getElementById("cartTotal").textContent = sumStr;
+  const mTot = document.getElementById("orderModalTotal");
+  if (mTot) mTot.textContent = sumStr;
+  const payBtn = document.getElementById("btnOpenPosPay");
+  if (payBtn) payBtn.textContent = `Apmokėti • ${sumStr}`;
+  const hasKitchenDish = cart.some(c => !["baras", "sandelis", "kita"].includes(String(c.zona || "").toLowerCase()));
+  const needKitchenSend = hasKitchenDish && !posOrderSentToKitchen;
+  const noteEl = document.getElementById("inpNote");
+  const kRow = document.getElementById("posKitchenRow");
+  const pRow = document.getElementById("posPayRow");
+  const cancelDirect = document.getElementById("btnCancelPosDirect");
+  const totRow = document.getElementById("orderModalTotalRow");
+  if (noteEl) noteEl.style.display = needKitchenSend ? "block" : "none";
+  if (kRow) kRow.style.display = needKitchenSend ? "grid" : "none";
+  if (totRow) totRow.style.display = needKitchenSend ? "flex" : "none";
+  if (pRow) pRow.style.display = needKitchenSend ? "none" : "flex";
+  if (cancelDirect) cancelDirect.style.display = hasKitchenDish ? "none" : "flex";
+  if (pRow) pRow.style.justifyContent = hasKitchenDish ? "flex-end" : "space-between";
+  const posClr = document.getElementById("posBarClearBtn");
+  if (posClr) posClr.style.display = posOrderSentToKitchen ? "none" : "inline-block";
+  renderMenu();
+}
+
+function isAfterWorkHoursNow() {
+  if (!waiterState) return false;
+  const wh = waiterState.work_hours;
+  if (!wh || !wh.ijungta) return !!waiterState.after_hours;
+  try {
+    const [sh, sm] = String(wh.pradzia || "08:00").split(":").map(Number);
+    const [eh, em] = String(wh.pabaiga || "22:00").split(":").map(Number);
+    const dt = new Date();
+    const cur = dt.getHours() * 60 + dt.getMinutes();
+    const sM = sh * 60 + sm, eM = eh * 60 + em;
+    const inside = (sM <= eM) ? (cur >= sM && cur < eM) : (cur >= sM || cur < eM);
+    return !inside;
+  } catch {
+    return !!waiterState.after_hours;
+  }
+}
+
+async function sendPosToKitchen() {
+  if (!cart.length) return;
+  if (!waiterPin || !waiterState) {
+    toast("🔐 Pirma atrakinkite kasą PIN kodu!", true);
+    openPinLock();
+    return;
+  }
+  if (isAfterWorkHoursNow()) {
+    toast("🌙 " + (waiterState.after_hours_msg || "Darbo laikas baigėsi — užsakymų siųsti negalima."), true);
+    return;
+  }
+  const targetTid = (document.getElementById("posTargetTable")?.value || "").trim();
+  if (targetTid && waiterPin) {
+    try {
+      for (const c of cart) {
+        await svcCall("/api/stalai/prideti", "POST", {
+          pin: waiterPin, table_id: targetTid, check_id: "",
+          pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c), tipas: "patiekalas"
+        });
+      }
+      const res = await svcCall("/api/stalai/siusti", "POST", {
+        pin: waiterPin, table_id: targetTid, check_id: ""
+      });
+      const m = String(res.zinute || "").match(/\(([^)]+)\)/);
+      const batchId = (m && m[1]) || `${targetTid}-${Date.now().toString().slice(-4)}`;
+      const { timestamp } = nowParts();
+      const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+      receipts.unshift({
+        cekis: batchId,
+        data: timestamp,
+        total,
+        table_id: targetTid,
+        check_id: "",
+        batch_id: batchId,
+        items: JSON.parse(JSON.stringify(cart)),
+        status: "Aktyvus",
+        via: "stalas"
+      });
+      receipts = receipts.slice(0, 40);
+      localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+      renderReceipts();
+      const tbl = ((waiterState && waiterState.tables) || []).find(x => x.id === targetTid);
+      const tName = (tbl && tbl.pavadinimas) || targetTid;
+      cancelPosOrder();
+      await loadTablesState(false);
+      toast(`🍳 Perkelta į ${tName} ir išsiųsta į virtuvę!`);
+      return;
+    } catch (e) {
+      toast("⚠️ " + e.message, true);
+      return;
+    }
+  }
+  const cekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
+  const {data, laikas, timestamp} = nowParts();
+  const note = document.getElementById("inpNote").value.trim();
+  const orderDisc = Number(document.getElementById("inpOrderDisc").value || 0);
+  const payload = {
+    cekio_nr: cekis, data, laikas, timestamp,
+    mokejimo_budas: "neapmoketas", pastaba: note, nuolaida_proc: orderDisc,
+    elementai: cart.map(c => ({
+      kodas: c.plu || "", pavadinimas: c.pavadinimas, kiekis: c.kiekis,
+      kaina: Number(c.kaina || 0), pradine_kaina: Number(c.kaina || 0),
+      komentaras: note, nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc
+    }))
+  };
+  const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+  const res = await postWithFailover("/api/uzsakymas", payload);
+  receipts.unshift({cekis, data: timestamp, total, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
+  receipts = receipts.slice(0, 40);
+  localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+  renderReceipts();
+  posOrderSentToKitchen = true;
+  posActiveKitchenCekis = cekis;
+  renderCart();
+  loadKDS();
+  toast(res.ok ? (res.channel === "cloud" ? `☁️ #${cekis} išsiųsta į virtuvę per Cloud!` : `🏠 #${cekis} išsiųsta į virtuvę per LAN!`) : `📴 Nėra ryšio — #${cekis} įdėta į eilę!`, !res.ok);
+}
+
+async function onPosTableChange() {
+  const targetTid = (document.getElementById("posTargetTable")?.value || "").trim();
+  if (!targetTid || !posOrderSentToKitchen || !cart.length || !waiterPin) return;
+  try {
+    for (const c of cart) {
+      await svcCall("/api/stalai/prideti", "POST", {
+        pin: waiterPin, table_id: targetTid, check_id: "",
+        pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c), tipas: "patiekalas"
+      });
+    }
+    const res = await svcCall("/api/stalai/siusti", "POST", {
+      pin: waiterPin, table_id: targetTid, check_id: ""
+    });
+    const m = String(res.zinute || "").match(/\(([^)]+)\)/);
+    const batchId = (m && m[1]) || "";
+    const rec = receipts.find(x => x.cekis === posActiveKitchenCekis);
+    if (rec) {
+      rec.table_id = targetTid;
+      rec.check_id = "";
+      if (batchId) rec.batch_id = batchId;
+      localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+    }
+    const tbl = ((waiterState && waiterState.tables) || []).find(x => x.id === targetTid);
+    const tName = (tbl && tbl.pavadinimas) || targetTid;
+    cancelPosOrder();
+    await loadTablesState(false);
+    toast(`🔁 Užsakymas perkeltas į ${tName}!`);
+  } catch (e) {
+    toast("⚠️ " + e.message, true);
+  }
+}
+
+async function clearTableDrafts() {
+  const t = currentTableObj();
+  const curChk = t && (t.checks || []).find(c => c.id === activeCheckId);
+  const drafts = (curChk && curChk.items || []).filter(it => (it.status || "draft") === "draft");
+  if (!drafts.length) return toast("Nėra neišsiųstų pozicijų", true);
+  try {
+    for (const it of drafts) {
+      await svcCall("/api/stalai/anuliuoti", "POST", {
+        pin: waiterPin, table_id: activeTableId, check_id: activeCheckId, item_id: it.item_id
+      });
+    }
+    toast("✕ Krepšelis išvalytas");
+    await loadTablesState(false);
+  } catch (e) { toast("⚠️ " + e.message, true); }
+}
+
+function openPosOrderModal() {
+  if (!cart.length) return;
+  const sel = document.getElementById("posTargetTable");
+  if (sel) {
+    const curVal = sel.value;
+    const isMgr = (waiterState && waiterState.user && waiterState.user.role === "vadybininkas");
+    const uid = (waiterState && waiterState.user && waiterState.user.id) || "";
+    const allTbls = (waiterState && waiterState.tables) || [];
+    const tbls = isMgr ? allTbls : allTbls.filter(t => t.padavejas_id === uid || t.atidare_id === uid);
+    sel.style.display = tbls.length ? "block" : "none";
+    sel.innerHTML = `<option value="">Be stalo</option>` +
+      tbls.map(t => `<option value="${t.id}">${t.pavadinimas}</option>`).join("");
+    if (tbls.some(t => t.id === curVal)) sel.value = curVal;
+  }
+  renderCart();
+  document.getElementById("posOrderModal").classList.add("open");
+}
+function closePosOrderModal() {
+  document.getElementById("posOrderModal").classList.remove("open");
+}
+function cancelPosOrder() {
+  posOrderSentToKitchen = false;
+  posActiveKitchenCekis = null;
+  cart = [];
+  document.getElementById("inpNote").value = "";
+  document.getElementById("inpOrderDisc").value = "";
+  closePosOrderModal();
+  renderCart();
+}
+function openPosPayModal() {
+  if (!cart.length) return;
+  const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+  document.getElementById("posPayTotal").textContent = total.toFixed(2) + " €";
+  document.getElementById("posPayModal").classList.add("open");
+}
+function closePosPayModal() {
+  document.getElementById("posPayModal").classList.remove("open");
+}
+async function confirmPosPay(method) {
+  closePosPayModal();
+  closePosOrderModal();
+  await sendOrder(method);
 }
 
 /* Modifikatoriai */
@@ -1341,6 +1794,15 @@ async function applyTilePromo(proc) {
 /* Užsakymai, Nurašymas, Grąžinimas */
 async function sendOrder(pay) {
   if (!cart.length) return toast("Krepšelis tuščias!", true);
+  if (!waiterPin || !waiterState) {
+    toast("🔐 Pirma atrakinkite kasą PIN kodu!", true);
+    openPinLock();
+    return;
+  }
+  if (isAfterWorkHoursNow()) {
+    toast("🌙 " + (waiterState.after_hours_msg || "Darbo laikas baigėsi — užsakymų siųsti negalima."), true);
+    return;
+  }
   const cekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
   const {data, laikas, timestamp} = nowParts();
   const note = document.getElementById("inpNote").value.trim();
@@ -1359,9 +1821,10 @@ async function sendOrder(pay) {
       return {
         kodas: c.plu || "",
         pavadinimas: c.pavadinimas,
-        kiekis: c.kiekis,
-        kaina: Number(c.kaina || 0),
-        pradine_kaina: Number(c.kaina || 0),
+        kiekis: (c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l")) ? (c.kiekis / 1000.0) : c.kiekis,
+        kaina: (c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l")) ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+        pradine_kaina: (c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l")) ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+        mato_vnt: c.is_sandelis ? (c.orig_vnt || c.disp_vnt || "vnt") : undefined,
         komentaras: note,
         modifikacijos: mods,
         nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
@@ -1375,6 +1838,7 @@ async function sendOrder(pay) {
   receipts.unshift({cekis, data: timestamp, total, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
   receipts = receipts.slice(0, 40);
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+  posOrderSentToKitchen = false;
   cart = [];
   document.getElementById("inpNote").value = "";
   document.getElementById("inpOrderDisc").value = "";
@@ -1411,16 +1875,47 @@ async function writeOffCart() {
 async function cancelOrRefund(i, op) {
   const r = receipts[i];
   const {data, laikas, timestamp} = nowParts();
+  const reason = op === "atsaukti" ? "Mobilios kasos nurašymas" : "Mobilios kasos grąžinimas";
+  if (r.table_id && waiterPin) {
+    const tObj = ((waiterState && waiterState.tables) || []).find(x => x.id === r.table_id);
+    const chks = (tObj && tObj.checks) || [];
+    const chk = (r.check_id ? chks.find(c => c.id === r.check_id) : null) || chks.find(c => c.status !== "apmoketas") || chks[0];
+    const targetChkId = (chk && chk.id) || r.check_id || "";
+    const toVoid = ((chk && chk.items) || []).filter(it =>
+      (it.status || "draft") === "sent" && (
+        (r.batch_id && it.batch_id === r.batch_id) ||
+        it.batch_id === r.cekis ||
+        (r.items || []).some(ri => (ri.item_id && ri.item_id === it.item_id) || ri.pavadinimas === it.pavadinimas)
+      )
+    );
+    for (const it of toVoid) {
+      try {
+        await svcCall("/api/stalai/anuliuoti", "POST", {
+          pin: waiterPin, manager_pin: waiterPin, table_id: r.table_id, check_id: targetChkId,
+          item_id: it.item_id, priezastis: reason
+        });
+      } catch (e) {
+        toast("⚠️ " + e.message, true);
+        return;
+      }
+    }
+    if (activeTableId === r.table_id) closeTableOrderModal();
+    await loadTablesState(false);
+  }
   const payload = {
     veiksmas: op,
     cekio_nr: r.cekis,
-    priezastis: op === "atsaukti" ? "Mobilios kasos nurašymas" : "Mobilios kasos grąžinimas",
+    priezastis: reason,
     data, laikas, timestamp
   };
   const res = await postWithFailover("/api/uzsakymas", payload);
+  if (!r.table_id && (r.cekis === posActiveKitchenCekis || (r.via === "virtuve" && posOrderSentToKitchen))) {
+    cancelPosOrder();
+  }
   r.status = op === "atsaukti" ? "Nurašyta" : "Grąžinta";
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   renderReceipts();
+  loadKDS();
   if (res.ok) toast((op === "atsaukti" ? "🗑️ #" : "↩️ #") + r.cekis + ` ${r.status.toLowerCase()} per ${res.channel.toUpperCase()}!`);
   else {
     offlineQueue.push(payload);
@@ -1434,12 +1929,13 @@ function clearInactiveReceipts() {
   receipts = receipts.filter(r => r.status === "Aktyvus");
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   renderReceipts();
+  loadKDS();
   const removed = before - receipts.length;
   toast(removed > 0 ? `🧹 Išvalyta neaktyvių čekių: ${removed}` : "Neaktyvių čekių nėra.");
 }
 
 function renderReceipts() {
-  document.getElementById("recCnt").textContent = receipts.length;
+  document.getElementById("recCnt").textContent = receipts.length ? ` (${receipts.length})` : "";
   document.getElementById("receiptsList").innerHTML = receipts.map((r, i) => `
     <div class="glass-card">
       <div class="row-between">
@@ -1504,6 +2000,8 @@ async function syncRemoteData(notify=false) {
           });
           localStorage.setItem("mi_app_menu", JSON.stringify(menu));
           gotMenu = true;
+          localStorage.setItem("mi_menu_synced", "1");
+          document.querySelectorAll(".btn-sync-prog").forEach(b => b.style.display = "none");
         }
       }
       if (rs && rs.ok) {
@@ -1520,33 +2018,130 @@ async function syncRemoteData(notify=false) {
   if (notify) toast(gotMenu ? `✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.` : "⚠️ Nepavyko pasiekti meniu", !gotMenu);
 }
 
+let kdsTimersMap = {};
 async function loadKDS() {
-  const lan = cleanUrl(cfg.lanUrl);
   const el = document.getElementById("kdsList");
-  if (!lan) { el.innerHTML = `<div style="color:var(--muted);padding:20px;">Nenurodytas LAN adresas.</div>`; return; }
-  try {
-    const r = await fetchTimeout(lan + "/api/aktyvus", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 2500);
-    if (!r.ok) throw new Error();
-    const js = await r.json();
-    const list = js.uzsakymai || [];
-    document.getElementById("kdsCnt").textContent = list.length;
-    el.innerHTML = list.map(u => {
-      const zm = getZoneMeta(u.zona);
-      return `
-        <div class="glass-card" style="box-shadow:0 0 14px ${zm.spalva}26, 0 4px 16px rgba(0,0,0,0.5);">
-          <div class="row-between">
-            <b>#${u.cekio_nr || u.nr || ''} • ${u.pavadinimas || ''}</b>
-            <span class="zone-badge" style="color:${zm.spalva};text-shadow:0 0 10px ${zm.spalva}88;">${zm.kodas}</span>
-          </div>
-          <div style="font-size:12px;color:var(--muted);">Laikas: ${u.uzsakymo_laikas || u.laikas || ''} ${u.komentaras ? '• '+u.komentaras : ''}</div>
-        </div>`;
-    }).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Aktyvių užsakymų virtuvėje nėra.</div>`;
-  } catch {
-    el.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;">Virtuvės ekranas pasiekiamas tik prisijungus prie vietinio LAN (Model MI).</div>`;
+  const cloud = _effectiveCloudUrl(), lan = cleanUrl(cfg.lanUrl);
+  const headers = cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {};
+  const tries = [];
+  if (cfg.mode !== "lan" && cloud) tries.push({ ch: "cloud", url: cloud + "/api/uzsakymai" });
+  if (cfg.mode !== "cloud" && lan) tries.push({ ch: "lan", url: lan + "/api/aktyvus" });
+  if (!tries.length) {
+    document.getElementById("kdsCnt").textContent = "";
+    el.innerHTML = `<div style="color:#FCA5A5;text-align:center;padding:24px;">⚠️ Gedimas: nenurodytas nei Cloud, nei LAN adresas.</div>`;
+    return;
   }
+  let loaded = false;
+  let list = [];
+  for (const t of tries) {
+    try {
+      const r = await fetchTimeout(t.url, { headers }, 2800);
+      if (!r.ok) continue;
+      const js = await r.json();
+      if (t.ch === "lan") {
+        list = js.uzsakymai || [];
+        if (js.laikai && typeof js.laikai === "object") kdsTimersMap = js.laikai;
+      } else {
+        const raw = js.uzsakymai || [];
+        const voidedAll = new Set();
+        const voidedItems = new Set();
+        for (const o of raw) {
+          const v = String(o.veiksmas || "").toLowerCase();
+          if (["atsaukti", "grazinti", "nurasyti"].includes(v)) {
+            const cnr = String(o.cekio_nr || "");
+            if (o.pavadinimas) voidedItems.add(cnr + "::" + String(o.pavadinimas).toLowerCase());
+            else if (cnr) voidedAll.add(cnr);
+          }
+        }
+        list = [];
+        for (const o of raw.slice().reverse()) {
+          const v = String(o.veiksmas || "").toLowerCase();
+          if (["atsaukti", "grazinti", "nurasyti"].includes(v)) continue;
+          const cnr = String(o.cekio_nr || "");
+          if (voidedAll.has(cnr)) continue;
+          for (const it of (o.elementai || [])) {
+            if (voidedItems.has(cnr + "::" + String(it.pavadinimas || "").toLowerCase())) continue;
+            const mObj = menu.find(m => String(m.pavadinimas || "").toLowerCase() === String(it.pavadinimas || "").toLowerCase());
+            list.push({
+              cekio_nr: o.cekio_nr,
+              pavadinimas: `${it.kiekis || 1}× ${it.pavadinimas || ""}`,
+              zona: it.zona || (mObj && mObj.zona) || "kita",
+              laikas: String(o.timestamp || o.data || "").slice(11, 16),
+              komentaras: o.stalas ? `${o.stalas}${o.pastaba ? " • " + o.pastaba : ""}` : (o.pastaba || "")
+            });
+          }
+          if (list.length >= 40) break;
+        }
+      }
+      loaded = true;
+      break;
+    } catch {}
+  }
+  if (!loaded) {
+    document.getElementById("kdsCnt").textContent = "";
+    el.innerHTML = `<div style="color:#FCA5A5;text-align:center;padding:24px;">⚠️ Ryšio gedimas: nepavyko pasiekti nei Cloud, nei LAN serverio.</div>`;
+    return;
+  }
+  const lanUrlNow = cleanUrl(cfg.lanUrl);
+  if (lanUrlNow && cfg.mode !== "cloud") {
+    fetchTimeout(lanUrlNow + "/api/aktyvus", { headers }, 2000)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j && j.laikai && typeof j.laikai === "object") {
+          kdsTimersMap = j.laikai;
+          if (document.getElementById("tableOrderModal")?.classList.contains("open")) renderTableDetail();
+        }
+      }).catch(() => {});
+  }
+  document.getElementById("kdsCnt").textContent = list.length ? ` (${list.length})` : "";
+  el.innerHTML = list.map(u => {
+    const zm = getZoneMeta(u.zona);
+    return `
+      <div class="glass-card" style="box-shadow:0 0 14px ${zm.spalva}26, 0 4px 16px rgba(0,0,0,0.5);">
+        <div class="row-between">
+          <b>#${u.cekio_nr || u.nr || ''} • ${u.pavadinimas || ''}</b>
+          <span class="zone-badge" style="color:${zm.spalva};text-shadow:0 0 10px ${zm.spalva}88;">${zm.kodas}</span>
+        </div>
+        <div style="font-size:12px;color:var(--muted);">Laikas: ${u.uzsakymo_laikas || u.laikas || ''} ${u.komentaras ? '• '+u.komentaras : ''}</div>
+      </div>`;
+  }).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Aktyvių užsakymų virtuvėje nėra.</div>`;
 }
 
 function openSettings() {
+  document.getElementById("inpSettingsPin").value = "";
+  document.getElementById("settingsPinErr").textContent = "";
+  document.getElementById("settingsPinModal").classList.add("open");
+  setTimeout(() => document.getElementById("inpSettingsPin").focus(), 80);
+}
+function closeSettingsPin() { document.getElementById("settingsPinModal").classList.remove("open"); }
+async function verifySettingsPin() {
+  const kodas = document.getElementById("inpSettingsPin").value.trim();
+  const errEl = document.getElementById("settingsPinErr");
+  if (kodas.length !== 6) {
+    errEl.textContent = "Įveskite 6 simbolių kodą.";
+    return;
+  }
+  const lan = cleanUrl(cfg.lanUrl);
+  if (!lan) {
+    errEl.textContent = "Nenurodytas Model MI (LAN) adresas.";
+    return;
+  }
+  try {
+    const r = await fetchTimeout(lan + "/api/sauga/patikrinti", {
+      method: "POST", headers: authHeaders(), body: JSON.stringify({ kodas })
+    }, 3500);
+    const js = await r.json().catch(() => ({}));
+    if (!r.ok || !js.ok) {
+      errEl.textContent = js.klaida || "Neteisingas 6 skaitmenų kodas.";
+      return;
+    }
+    closeSettingsPin();
+    _openSettingsModalReal();
+  } catch {
+    errEl.textContent = "Nepavyko pasiekti Model MI (LAN) kodo patikrai.";
+  }
+}
+function _openSettingsModalReal() {
   document.getElementById("cfgMode").value = cfg.mode;
   syncMiSelect("cfgMode");
   document.getElementById("cfgCloud").value = cfg.cloudUrl;
@@ -1592,19 +2187,17 @@ let pinBuf = "";
 let voidTarget = null;
 let lastWaiterActivity = Date.now();
 
+let svcLastChannel = "cloud";
 function svcBaseUrls() {
   const urls = [];
-  if (location.protocol === "http:" || location.protocol === "https:") {
-    urls.push(cleanUrl(location.origin));
-  }
-  const lan = cleanUrl(cfg.lanUrl), cloud = cleanUrl(cfg.cloudUrl);
+  const cloud = _effectiveCloudUrl(), lan = cleanUrl(cfg.lanUrl);
   if (cfg.mode === "cloud") {
-    if (cloud && !urls.includes(cloud)) urls.push(cloud);
+    if (cloud) urls.push(cloud);
   } else if (cfg.mode === "lan") {
-    if (lan && !urls.includes(lan)) urls.push(lan);
+    if (lan) urls.push(lan);
   } else {
+    if (cloud) urls.push(cloud);
     if (lan && !urls.includes(lan)) urls.push(lan);
-    if (cloud && !urls.includes(cloud)) urls.push(cloud);
   }
   return urls;
 }
@@ -1615,9 +2208,10 @@ async function svcCall(path, method="GET", body=null) {
   const opts = {method, headers: authHeaders()};
   if (body !== null) opts.body = JSON.stringify(body);
   let lastErr = null;
+  const lan = cleanUrl(cfg.lanUrl);
   for (const base of bases) {
     try {
-      const ms = (base === cleanUrl(cfg.cloudUrl)) ? 15000 : 4000;
+      const ms = (base === _effectiveCloudUrl()) ? 15000 : 4000;
       const r = await fetchTimeout(base + path, opts, ms);
       const txt = await r.text();
       let js = null;
@@ -1627,10 +2221,12 @@ async function svcCall(path, method="GET", body=null) {
         continue;
       }
       if (!r.ok) {
+        svcLastChannel = (lan && base === lan) ? "lan" : "cloud";
         const err = new Error(js.klaida || `HTTP ${r.status}`);
         err.data = js;
         throw err;
       }
+      svcLastChannel = (lan && base === lan) ? "lan" : "cloud";
       return js;
     } catch (e) {
       if (e && e.data) throw e;
@@ -1667,8 +2263,10 @@ async function pinSubmit() {
     sessionStorage.setItem("mi_waiter_pin", waiterPin);
     pinBuf = ""; updatePinDots();
     lastWaiterActivity = Date.now();
+    document.getElementById("lockCornerRow").style.display = "flex";
     await loadTablesState(false);
-    const nm = (res.user && res.user.vardas) || (waiterState && waiterState.user && waiterState.user.vardas) || "Prisijungta";
+    const rawNm = (res.user && res.user.vardas) || (waiterState && waiterState.user && waiterState.user.vardas) || "Prisijungta";
+    const nm = (res.user && res.user.role === "vadybininkas" && rawNm === "Vadybininkas") ? "Administratorius" : rawNm;
     toast(`👋 Prisijungė: ${nm}`);
   } catch (e) {
     document.getElementById("pinErr").textContent = e.message || "Neteisingas PIN";
@@ -1684,7 +2282,9 @@ function lockWaiter() {
   sessionStorage.removeItem("mi_waiter_pin");
   document.getElementById("pinGate").style.display = "flex";
   document.getElementById("tablesWorkspace").style.display = "none";
+  document.getElementById("lockCornerRow").style.display = "none";
   document.getElementById("waiterPill").textContent = "🔒 Padavėjas";
+  switchTab("tables", document.querySelector(".tab-btn"));
 }
 function openPinLock() {
   switchTab("tables", document.querySelector(".tab-btn"));
@@ -1700,8 +2300,10 @@ async function loadTablesState(notify=false) {
     document.getElementById("tablesWorkspace").style.display = "flex";
     const u = (js && js.user) || {};
     const icon = u.role === "vadybininkas" ? "👑" : "👤";
-    document.getElementById("waiterPill").textContent = `${icon} ${u.vardas || "Padavėjas"}`;
-    document.getElementById("tblUserLbl").textContent = `${icon} ${u.vardas || "Padavėjas"} (${u.role === "vadybininkas" ? "Vadybininkas" : "Padavėjas"})`;
+    const roleLbl = u.role === "vadybininkas" ? "Administratorius" : "Padavėjas";
+    const dispName = (u.role === "vadybininkas" && (!u.vardas || u.vardas === "Vadybininkas")) ? "Administratorius" : (u.vardas || "Padavėjas");
+    document.getElementById("waiterPill").textContent = `${icon} ${dispName}`;
+    document.getElementById("tblUserLbl").textContent = dispName === roleLbl ? `${icon} ${dispName}` : `${icon} ${dispName} (${roleLbl})`;
     const wh = js.work_hours || {};
     document.getElementById("tblHoursLbl").textContent = wh.ijungta ? `🕒 ${wh.pradzia}–${wh.pabaiga}` : "🕒 Neribotas laikas";
     document.getElementById("btnMgrAdmin").style.display = (u.role === "vadybininkas") ? "inline-flex" : "none";
@@ -1726,15 +2328,17 @@ function renderTablesGrid() {
   const det = document.getElementById("tableDetail");
   if (activeTableId) {
     grid.style.display = "none";
-    det.style.display = "grid";
+    det.style.display = "flex";
     return;
   }
   grid.style.display = "grid";
   det.style.display = "none";
   const tables = (waiterState && waiterState.tables) || [];
   grid.innerHTML = tables.map(t => {
-    const stLbl = t.status === "saskaita" ? "🧾 Sąskaita" : (t.status === "uzimtas" ? "🍽️ Užimtas" : "Laisvas");
-    const cls = t.status === "saskaita" ? "saskaita" : (t.status === "uzimtas" ? "uzimtas" : "");
+    const hasSent = (t.checks || []).some(c => (c.items || []).some(it => (it.status || "draft") === "sent"));
+    const effStatus = hasSent ? (t.status === "saskaita" ? "saskaita" : "uzimtas") : "laisvas";
+    const stLbl = effStatus === "saskaita" ? "🧾 Sąskaita" : (effStatus === "uzimtas" ? "🍽️ Užimtas" : "Laisvas");
+    const cls = effStatus === "saskaita" ? "saskaita" : (effStatus === "uzimtas" ? "uzimtas" : "");
     return `
       <div class="tbl-card ${cls}" onclick="openTable('${t.id}')">
         <div class="row-between">
@@ -1783,12 +2387,55 @@ function currentTableObj() {
   return ((waiterState && waiterState.tables) || []).find(x => x.id === activeTableId) || null;
 }
 
+function _getDishTimerHtml(pav) {
+  const raw = String(pav || "").trim().toLowerCase();
+  const clean = raw.replace(/\s*\(.*?\)/g, "").trim();
+  const tm = kdsTimersMap[raw] || kdsTimersMap[clean];
+  if (!tm) return "";
+  const sec = Number(tm.rem_sec);
+  let tLbl = tm.time_str || "";
+  if (Number.isFinite(sec) && sec >= 0) {
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(Math.floor(sec % 60)).padStart(2, "0");
+    tLbl = tm.in_queue ? `⏳ Eilėje ~${mm}:${ss}` : `⏱ Liko: ${mm}:${ss}`;
+  }
+  return `<div style="font-size:11px;font-weight:700;color:${tm.in_queue ? '#94A3B8' : 'var(--amber)'};margin-top:2px;">${tLbl}</div>`;
+}
+
+function openTableOrderModal() {
+  if (!activeTableId) return;
+  renderTableDetail();
+  document.getElementById("tableOrderModal").classList.add("open");
+  loadKDS();
+  clearInterval(window._tblTimerTick);
+  window._tblTimerTick = setInterval(() => {
+    if (document.getElementById("tableOrderModal")?.classList.contains("open")) loadKDS();
+    else clearInterval(window._tblTimerTick);
+  }, 3000);
+}
+function closeTableOrderModal() {
+  clearInterval(window._tblTimerTick);
+  document.getElementById("tableOrderModal").classList.remove("open");
+}
+function openTablePaySelectModal() {
+  const t = currentTableObj();
+  if (!t) return;
+  const curChk = (t.checks || []).find(c => c.id === activeCheckId);
+  const amt = Number((curChk && curChk.totals && curChk.totals.total) ?? t.unpaid_sum ?? 0);
+  document.getElementById("tblPaySelectTotal").textContent = amt.toFixed(2) + " €";
+  document.getElementById("tablePaySelectModal").classList.add("open");
+}
+function closeTablePaySelectModal() {
+  document.getElementById("tablePaySelectModal").classList.remove("open");
+}
+
 function renderTableDetail() {
   const t = currentTableObj();
   if (!t) { backToTables(); return; }
   document.getElementById("tdTitle").textContent = t.pavadinimas;
-  document.getElementById("tdMeta").textContent = `${t.zona} • ${t.padavejas_vardas} • ${t.opened_at || ""}`;
-  document.getElementById("tdTotal").textContent = t.unpaid_sum.toFixed(2) + " €";
+  document.getElementById("tdMeta").textContent = `${t.zona} • ${t.padavejas_vardas}${t.opened_at ? " • " + t.opened_at : ""}`;
+  const barTitle = document.getElementById("tblBarTitle");
+  if (barTitle) barTitle.textContent = t.pavadinimas;
 
   const chks = t.checks || [];
   if (!chks.some(c => c.id === activeCheckId) && chks.length) {
@@ -1802,40 +2449,65 @@ function renderTableDetail() {
   }).join("");
 
   const curChk = chks.find(c => c.id === activeCheckId);
+  const activeQty = (curChk && curChk.items || []).reduce((s, it) => s + ((it.status || "draft") !== "voided" ? Number(it.kiekis || 0) : 0), 0);
+  const tblBar = document.getElementById("tblSummaryBar");
+  if (tblBar) tblBar.style.display = activeQty > 0 ? "flex" : "none";
+  const barCnt = document.getElementById("tblBarCount");
+  const cleanQty = Math.abs(activeQty - Math.round(activeQty)) < 0.02 ? Math.round(activeQty) : Number(activeQty.toFixed(2));
+  if (barCnt) barCnt.textContent = `${cleanQty} porc.`;
+  const chkTotal = Number((curChk && curChk.totals && curChk.totals.total) ?? t.unpaid_sum ?? 0);
+  document.getElementById("tdTotal").textContent = chkTotal.toFixed(2) + " €";
+  const mTot = document.getElementById("tblModalTotal");
+  if (mTot) mTot.textContent = chkTotal.toFixed(2) + " €";
+  const payBtn = document.getElementById("btnOpenTblPay");
+  if (payBtn) payBtn.textContent = `Apmokėti • ${chkTotal.toFixed(2)} €`;
+
+  const chkItems = (curChk && curChk.items) || [];
+  const hasDrafts = chkItems.some(it => (it.status || "draft") === "draft");
+  const hasSent = chkItems.some(it => (it.status || "draft") === "sent");
+  const draftAct = document.getElementById("tblDraftActions");
+  const sentAct = document.getElementById("tblSentActions");
+  const tblNote = document.getElementById("inpTblNote");
+  const tblClr = document.getElementById("tblBarClearBtn");
+  if (draftAct) draftAct.style.display = hasDrafts ? "grid" : "none";
+  if (sentAct) sentAct.style.display = (!hasDrafts && hasSent) ? "flex" : "none";
+  if (tblNote) tblNote.style.display = hasDrafts ? "block" : "none";
+  if (tblClr) tblClr.style.display = hasDrafts ? "inline-block" : "none";
+
   const itemsEl = document.getElementById("tdItems");
-  if (!curChk || !(curChk.items || []).length) {
-    itemsEl.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;font-size:13px;">Sąskaita tuščia. Pridėkite patiekalus iš kairės.</div>`;
+  const visibleItems = chkItems.filter(it => (it.status || "draft") !== "voided");
+  if (!curChk || !visibleItems.length) {
+    itemsEl.innerHTML = `<div style="color:var(--muted);text-align:center;padding:24px;font-size:13px;">Sąskaita tuščia. Pridėkite patiekalus iš meniu.</div>`;
   } else {
-    itemsEl.innerHTML = curChk.items.map(it => {
+    itemsEl.innerHTML = visibleItems.map(it => {
       const st = it.status || "draft";
-      const tag = st === "draft" ? `<span class="it-tag draft">🟡 Neišsiųsta</span>` : (st === "sent" ? `<span class="it-tag sent">🍳 Virtuvėje</span>` : `<span class="it-tag voided">✕ Anuliuota</span>`);
-      const rightCtrl = st === "voided" ? "" : (
+      const mObj = menu.find(m => String(m.pavadinimas || "").toLowerCase() === String(it.pavadinimas || "").toLowerCase());
+      const zm = getZoneMeta(it.zona || (mObj && mObj.zona) || "kita");
+      const hasMods = (it.neideti?.length || it.pakeisti?.length || it.priedai?.length || Number(it.nuolaida_proc || 0) > 0);
+      const rightCtrl = st === "voided" ? `<span style="font-size:11px;color:#FCA5A5;">Anuliuota</span>` : (
         st === "draft"
-          ? `<div class="qty-ctrl">
+          ? `<div class="qty-ctrl" style="flex-shrink:0;">
                <button class="q-btn" onclick="addDishToTable('${String(it.pavadinimas).replace(/'/g,"\\'")}', ${Number(it.kaina||0)}, -1)">−</button>
-               <b style="min-width:20px;text-align:center;">${it.kiekis}</b>
+               <b style="min-width:20px;text-align:center;font-size:13px;">${it.kiekis}</b>
                <button class="q-btn" onclick="addDishToTable('${String(it.pavadinimas).replace(/'/g,"\\'")}', ${Number(it.kaina||0)}, 1)">+</button>
-             </div>`
-          : `<button class="btn" style="padding:4px 8px;font-size:11px;color:#FCA5A5;" onclick="openVoidModal('${it.item_id}','${String(it.pavadinimas).replace(/'/g,"")}')">Anuliuoti</button>`
+             </div>
+             <b style="min-width:58px;text-align:right;color:var(--amber);font-size:13px;flex-shrink:0;">${(it.kiekis * it.kaina).toFixed(2)} €</b>`
+          : `<span style="font-size:12px;color:var(--muted);flex-shrink:0;">×${it.kiekis}</span>
+             <b style="min-width:54px;text-align:right;color:var(--amber);font-size:13px;flex-shrink:0;">${(it.kiekis * it.kaina).toFixed(2)} €</b>
+             <button class="btn" style="padding:4px 8px;font-size:11px;color:#FCA5A5;flex-shrink:0;" onclick="openVoidModal('${it.item_id}','${String(it.pavadinimas).replace(/'/g,"")}')">✕</button>`
       );
-      const modBtns = st === "draft" ? `
-        <div class="pay-row" style="margin-top:0;">
-          <button class="btn" style="flex:1;padding:5px 8px;font-size:11.5px;" onclick="openTableModModal('${it.item_id}', false)">⚙️ Modifikuoti</button>
-          <button class="btn" style="flex:1;padding:5px 8px;font-size:11.5px;color:#FDE047;" onclick="openTableModModal('${it.item_id}', true)">🏷️ Akcija</button>
-        </div>` : "";
       return `
-        <div class="cart-row" style="${st === 'voided' ? 'opacity:0.45;text-decoration:line-through;' : ''}">
-          <div class="row-between">
-            <div style="flex:1;min-width:0;">
-              <div style="font-weight:700;font-size:13px;">${it.pavadinimas}</div>
-              <div style="display:flex;gap:6px;align-items:center;margin-top:2px;">
-                ${tag}
-                <span style="font-size:11.5px;color:var(--muted);">${Number(it.kaina).toFixed(2)} € × ${it.kiekis} = <b style="color:var(--amber);">${(it.kiekis * it.kaina).toFixed(2)} €</b></span>
+        <div class="cart-row" style="padding:8px 10px;gap:0;${st === 'voided' ? 'opacity:0.45;text-decoration:line-through;' : ''}">
+          <div class="row-between" style="gap:8px;">
+            <div style="flex:1;min-width:0;${st === 'draft' ? 'cursor:pointer;' : ''}" ${st === 'draft' ? `onclick="openTableModModal('${it.item_id}', false)" title="Spauskite modifikuoti arba pritaikyti nuolaidą"` : ''}>
+              <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+                <span style="color:${zm.spalva};font-weight:900;margin-right:5px;">${zm.kodas}</span>${it.pavadinimas}
+                ${hasMods ? `<span style="color:var(--amber);font-size:11px;margin-left:4px;">●</span>` : ""}
               </div>
+              ${st === "sent" ? _getDishTimerHtml(it.pavadinimas) : ""}
             </div>
             ${rightCtrl}
           </div>
-          ${modBtns}
         </div>`;
     }).join("");
   }
@@ -1854,16 +2526,22 @@ function renderTableMenu() {
     (tblCat === "Visi" || (m.kat || "Patiekalai") === tblCat) &&
     (!q || m.pavadinimas.toLowerCase().includes(q) || String(m.plu || "").toLowerCase().includes(q))
   );
+  const t = currentTableObj();
+  const curChk = t ? (t.checks || []).find(c => c.id === activeCheckId) : null;
   document.getElementById("tblMenuGrid").innerHTML = list.map(m => {
     const idx = menu.indexOf(m);
     const zm = getZoneMeta(m.zona);
     const akc = Number(m.akcija_proc || 0);
     const kEff = akc > 0 ? Math.max(0, Number(m.kaina || 0) * (1 - akc / 100)) : Number(m.kaina || 0);
+    const inTblQty = (curChk && curChk.items || []).reduce((s, it) => s + ((it.status || "draft") !== "voided" && it.pavadinimas === m.pavadinimas ? Number(it.kiekis || 0) : 0), 0);
     return `
       <div class="dish-card" onclick="addDishToTable('${String(m.pavadinimas).replace(/'/g,"\\'")}', ${kEff}, 1)">
         <div class="dish-top">
           <span class="zone-badge" style="color:${zm.spalva};text-shadow:0 0 10px ${zm.spalva}88;">${zm.kodas}</span>
-          <button class="promo-btn" onclick="event.stopPropagation();openTilePromo(${idx})">${akc>0 ? '-'+akc+'%' : '🏷️'}</button>
+          <div style="display:flex;align-items:center;gap:5px;">
+            ${inTblQty > 0 ? `<span style="background:var(--amber);color:#0B0D12;font-weight:900;font-size:11px;padding:1px 7px;border-radius:999px;">×${inTblQty}</span>` : ''}
+            <button class="promo-btn ${akc>0?'active':''}" onclick="event.stopPropagation();openTilePromo(${idx})">${akc>0 ? '-'+akc+'%' : '🏷️'}</button>
+          </div>
         </div>
         <div class="dish-name">${m.pavadinimas}</div>
         <div class="row-between">
@@ -1890,11 +2568,35 @@ async function addDishToTable(pav, kaina, qty=1) {
 async function sendTableToKitchen() {
   lastWaiterActivity = Date.now();
   try {
+    const t = currentTableObj();
+    const curChk = t && (t.checks || []).find(c => c.id === activeCheckId);
+    const drafts = ((curChk && curChk.items) || []).filter(it => (it.status || "draft") === "draft");
     const res = await svcCall("/api/stalai/siusti", "POST", {
       pin: waiterPin, table_id: activeTableId, check_id: activeCheckId
     });
-    toast("🍳 " + (res.zinute || "Išsiųsta į virtuvę"));
+    if (drafts.length) {
+      const { timestamp } = nowParts();
+      const m = String(res.zinute || "").match(/\(([^)]+)\)/);
+      const cekNr = (m && m[1]) || `${(t && t.pavadinimas) || "Stalas"}-${Date.now().toString().slice(-4)}`;
+      const tot = drafts.reduce((s, it) => s + Number(it.kiekis || 0) * Number(it.kaina || 0), 0);
+      receipts.unshift({
+        cekis: cekNr,
+        data: timestamp,
+        total: tot,
+        table_id: activeTableId,
+        check_id: activeCheckId,
+        items: drafts.map(it => ({ item_id: it.item_id, pavadinimas: it.pavadinimas, kiekis: it.kiekis, kaina: it.kaina })),
+        status: "Aktyvus",
+        via: "stalas"
+      });
+      receipts = receipts.slice(0, 40);
+      localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+      renderReceipts();
+    }
+    const chLbl = (svcLastChannel === "lan") ? "🏠 per LAN" : "☁️ per Cloud";
+    toast(`🍳 ${res.zinute || "Išsiųsta į virtuvę"} (${chLbl})`);
     await loadTablesState(false);
+    loadKDS();
   } catch (e) {
     toast("⚠️ " + e.message, true);
   }
@@ -1916,14 +2618,16 @@ function openVoidModal(itemId, name) {
   voidTarget = itemId;
   document.getElementById("voidItemLbl").textContent = name;
   document.getElementById("voidReason").value = "";
-  document.getElementById("voidMgrPin").value = "";
+  document.getElementById("voidMgrPin").value = waiterPin || "";
+  document.getElementById("voidReasonWrap").style.display = "none";
+  document.getElementById("voidMgrPinWrap").style.display = "none";
   document.getElementById("voidModal").classList.add("open");
 }
 function closeVoidModal() { document.getElementById("voidModal").classList.remove("open"); }
 async function confirmVoidItem() {
   if (!voidTarget) return;
   const r = document.getElementById("voidReason").value.trim() || "Svečio atsisakymas";
-  const mp = document.getElementById("voidMgrPin").value.trim();
+  const mp = document.getElementById("voidMgrPin").value.trim() || (waiterState && waiterState.user && waiterState.user.role === "vadybininkas" ? waiterPin : "");
   await removeOrVoidItem(voidTarget, "sent", r, mp);
   closeVoidModal();
 }
@@ -2028,7 +2732,11 @@ async function payTableCheck(budas, extra={}) {
       pin: waiterPin, table_id: activeTableId, check_id: activeCheckId, mokejimo_budas: budas
     }, extra));
     toast("✅ " + (res.zinute || "Apmokėta"));
-    if (res.table_closed) activeTableId = "";
+    closeTablePaySelectModal();
+    if (res.table_closed) {
+      activeTableId = "";
+      closeTableOrderModal();
+    }
     await loadTablesState(false);
   } catch (e) { toast("⚠️ " + e.message, true); }
 }
@@ -2129,10 +2837,11 @@ function openShiftModal() {
 function closeShiftModal() { document.getElementById("shiftModal").classList.remove("open"); }
 
 function openTransferModal() {
-  const staff = (waiterState && waiterState.staff_names) || [];
+  const curUid = waiterState && waiterState.user && waiterState.user.id;
+  const staff = ((waiterState && waiterState.staff_names) || []).filter(s => s.id !== curUid);
   document.getElementById("transferList").innerHTML = staff.map(s =>
     `<button class="btn" style="justify-content:flex-start;" onclick="transferTableTo('${s.id}')">${s.role === 'vadybininkas' ? '👑' : '👤'} ${s.vardas}</button>`
-  ).join("");
+  ).join("") || `<div style="color:var(--muted);font-size:12.5px;">Nėra kitų aktyvių darbuotojų.</div>`;
   document.getElementById("transferModal").classList.add("open");
 }
 function closeTransferModal() { document.getElementById("transferModal").classList.remove("open"); }
@@ -2140,9 +2849,9 @@ async function transferTableTo(sid) {
   try {
     const res = await svcCall("/api/stalai/perleisti", "POST", {pin: waiterPin, table_id: activeTableId, target_staff_id: sid});
     closeTransferModal();
+    closeTableOrderModal();
     toast("🔁 " + (res.zinute || "Perleista"));
-    activeTableId = "";
-    await loadTablesState(false);
+    backToTables();
   } catch (e) { toast("⚠️ " + e.message, true); }
 }
 
@@ -2287,6 +2996,7 @@ async function saveMgrSettings() {
     padavejas_id: r.querySelector(".mgr-ta").dataset.val || "",
   })).filter(t => t.pavadinimas);
   try {
+    const cashRoundVal = document.getElementById("mgrCashRound").checked;
     await svcCall("/api/personalas/nustatymai", "POST", {
       pin: waiterPin,
       work_hours: {
@@ -2294,20 +3004,30 @@ async function saveMgrSettings() {
         pradzia: document.getElementById("mgrWhStart").value.trim(),
         pabaiga: document.getElementById("mgrWhEnd").value.trim(),
       },
-      cash_rounding: document.getElementById("mgrCashRound").checked,
+      cash_rounding: cashRoundVal,
       staff,
       tables
     });
+    if (waiterState) waiterState.cash_rounding = cashRoundVal;
     closeMgrModal();
     toast("💾 Nustatymai išsaugoti");
     await loadTablesState(false);
   } catch (e) { toast("⚠️ " + e.message, true); }
 }
 
-if (waiterPin) loadTablesState(false);
+if (localStorage.getItem("mi_menu_synced") === "1" && menu.length) {
+  document.querySelectorAll(".btn-sync-prog").forEach(b => b.style.display = "none");
+}
+if (waiterPin) {
+  document.getElementById("lockCornerRow").style.display = "flex";
+  loadTablesState(false);
+}
+["pointerdown", "touchstart", "keydown", "scroll"].forEach(ev => {
+  document.addEventListener(ev, () => { lastWaiterActivity = Date.now(); }, { passive: true, capture: true });
+});
 setInterval(() => {
-  if (waiterPin && (Date.now() - lastWaiterActivity > 90000)) lockWaiter();
-}, 10000);
+  if (waiterPin && (Date.now() - lastWaiterActivity >= 60000)) lockWaiter();
+}, 2000);
 </script>
 </body>
 </html>
