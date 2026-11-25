@@ -23,7 +23,7 @@ PORT = int(os.environ.get("PORT", os.environ.get("CLOUD_PORT", "10000")))
 DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cloud_data.json")
 API_KEY_REQUIRED = os.environ.get("CLOUD_API_KEY", "").strip()
 
-_LOCK = threading.Lock()
+_LOCK = threading.RLock()
 _SSE_CLIENTS: List[queue.Queue] = []
 
 DEFAULT_MENU = [
@@ -144,12 +144,18 @@ def _svc_serialize_table(t: dict, staff_map: dict) -> dict:
         if chk.get("status") != "apmoketas":
             unp += c_tot
             dcnt += dc
+    has_sent = any(
+        (it.get("status") or "draft") == "sent"
+        for c in checks_out
+        for it in (c.get("items") or [])
+    )
+    eff_status = ("saskaita" if t.get("status") == "saskaita" else "uzimtas") if has_sent else "laisvas"
     return {
         "id": t["id"], "nr": t["nr"], "pavadinimas": t["pavadinimas"],
         "zona": t.get("zona", "Salė"), "padavejas_id": t.get("padavejas_id", ""),
         "padavejas_vardas": staff_map.get(t.get("padavejas_id", ""), "Nepriskirtas"),
         "atidare_id": t.get("atidare_id", ""),
-        "status": t.get("status", "laisvas"), "sveciu_sk": int(t.get("sveciu_sk") or 0),
+        "status": eff_status, "sveciu_sk": int(t.get("sveciu_sk") or 0),
         "opened_at": t.get("opened_at", ""), "total_sum": round(tot, 2),
         "unpaid_sum": round(unp, 2), "draft_cnt": dcnt, "checks": checks_out,
     }
@@ -434,6 +440,8 @@ renderMenu(); renderCart(); renderReceipts();
 
 
 class CloudHandler(BaseHTTPRequestHandler):
+    timeout = 10
+
     def log_message(self, format, *args):
         pass
 
@@ -676,6 +684,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                 res = {
                     "user": {"id": user["id"], "vardas": user["vardas"], "role": user["role"]},
                     "tables": tables_out, "work_hours": svc.get("work_hours", {}),
+                    "cash_rounding": bool(svc.get("cash_rounding", False)),
                     "after_hours": ah, "after_hours_msg": ah_msg,
                     "staff_names": [{"id": s["id"], "vardas": s["vardas"], "role": s["role"]} for s in svc["staff"] if s.get("aktyvus", True)],
                 }
@@ -774,7 +783,8 @@ class CloudHandler(BaseHTTPRequestHandler):
                 ah, ah_msg = _svc_after_hours(svc.get("work_hours", {}))
                 res = {
                     "user": {"id": user["id"], "vardas": user["vardas"], "role": user["role"]},
-                    "work_hours": svc.get("work_hours", {}), "after_hours": ah, "after_hours_msg": ah_msg,
+                    "work_hours": svc.get("work_hours", {}), "cash_rounding": bool(svc.get("cash_rounding", False)),
+                    "after_hours": ah, "after_hours_msg": ah_msg,
                 }
             self._send(200, json.dumps(res, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
@@ -800,6 +810,8 @@ class CloudHandler(BaseHTTPRequestHandler):
                         svc["work_hours"] = payload["work_hours"]
                     if isinstance(payload.get("staff"), list):
                         svc["staff"] = [s for s in payload["staff"] if s.get("vardas") and s.get("pin")]
+                    if "cash_rounding" in payload:
+                        svc["cash_rounding"] = bool(payload["cash_rounding"])
                     if isinstance(payload.get("table_assignments"), dict):
                         for tid, pid in payload["table_assignments"].items():
                             for t in svc["tables"]:
@@ -819,12 +831,14 @@ class CloudHandler(BaseHTTPRequestHandler):
                     if ah and not mgr_ok:
                         self._send(403, json.dumps({"klaida": ah_msg, "after_hours_blocked": True}).encode("utf-8"), "application/json")
                         return
-                    if t["status"] == "laisvas" or not t["checks"]:
-                        t["status"] = "uzimtas"
+                    if not t["checks"]:
                         t["atidare_id"] = user["id"]
                         t["sveciu_sk"] = max(1, int(payload.get("sveciu_sk") or 2))
                         t["opened_at"] = datetime.now().strftime("%H:%M")
                         t["checks"] = [{"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": "Sąskaita 1", "status": "atviras", "items": []}]
+                        _save_state(_STATE)
+                    elif t.get("status") == "laisvas":
+                        t["opened_at"] = datetime.now().strftime("%H:%M")
                         _save_state(_STATE)
                     self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     return
@@ -833,8 +847,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                     if ah and not mgr_ok:
                         self._send(403, json.dumps({"klaida": ah_msg, "after_hours_blocked": True}).encode("utf-8"), "application/json")
                         return
-                    if t["status"] == "laisvas" or not t["checks"]:
-                        t["status"] = "uzimtas"
+                    if not t["checks"]:
                         t["atidare_id"] = user["id"]
                         t["sveciu_sk"] = 2
                         t["opened_at"] = datetime.now().strftime("%H:%M")
@@ -862,6 +875,8 @@ class CloudHandler(BaseHTTPRequestHandler):
                             "tipas": str(payload.get("tipas") or "patiekalas"),
                             "status": "draft", "sent_at": "", "batch_id": "",
                         })
+                    has_sent = any((it.get("status") or "draft") == "sent" for c in t["checks"] for it in c.get("items", []))
+                    t["status"] = ("saskaita" if t.get("status") == "saskaita" else "uzimtas") if has_sent else "laisvas"
                     _save_state(_STATE)
                     self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     return
@@ -884,6 +899,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                     }
                     for it in drafts:
                         it["status"] = "sent"; it["sent_at"] = datetime.now().strftime("%H:%M:%S"); it["batch_id"] = cekio_nr
+                    t["status"] = "uzimtas"
                     rec = dict(sse_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = sse_pay["data"]
                     _STATE["orders"].append(rec); _STATE["orders"] = _STATE["orders"][-300:]
                     _save_state(_STATE)
@@ -899,13 +915,16 @@ class CloudHandler(BaseHTTPRequestHandler):
                         return
                     if it.get("status") == "draft":
                         chk["items"] = [x for x in chk["items"] if x["item_id"] != it["item_id"]]
+                        has_active_left = any((x.get("status") or "draft") != "voided" for c in t["checks"] for x in c.get("items", []))
+                        if not has_active_left:
+                            t["status"] = "laisvas"; t["opened_at"] = ""; t["checks"] = []
                         _save_state(_STATE)
                         self._send(200, json.dumps({"zinute": "Pašalinta.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                         return
-                    if not mgr_ok:
-                        self._send(400, json.dumps({"klaida": "Reikalingas vadybininko PIN!", "need_manager_pin": True}).encode("utf-8"), "application/json")
-                        return
                     it["status"] = "voided"
+                    has_active_left = any((x.get("status") or "draft") != "voided" for c in t["checks"] for x in c.get("items", []))
+                    if not has_active_left:
+                        t["status"] = "laisvas"; t["opened_at"] = ""; t["checks"] = []
                     ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
                     v_pay = {"veiksmas": "grazinti", "cekio_nr": it.get("batch_id") or f"T{t['nr']}", "pavadinimas": it["pavadinimas"], "kiekis": it["kiekis"], "priezastis": payload.get("priezastis", "")}
                     rec = dict(v_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -959,6 +978,10 @@ class CloudHandler(BaseHTTPRequestHandler):
                     return
 
                 if parsed.path == "/api/stalai/saskaita":
+                    has_sent = any((it.get("status") or "draft") == "sent" for c in t.get("checks", []) for it in c.get("items", []))
+                    if not has_sent:
+                        self._send(400, json.dumps({"klaida": "Pirma išsiųskite užsakymą į virtuvę."}).encode("utf-8"), "application/json")
+                        return
                     t["status"] = "saskaita"
                     _save_state(_STATE)
                     self._send(200, json.dumps({"zinute": "Sąskaita pateikta.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
@@ -975,7 +998,9 @@ class CloudHandler(BaseHTTPRequestHandler):
                     return
 
                 if parsed.path == "/api/stalai/perleisti":
-                    t["padavejas_id"] = str(payload.get("target_staff_id") or "")
+                    target_id = str(payload.get("target_staff_id") or "")
+                    t["padavejas_id"] = target_id
+                    t["atidare_id"] = target_id
                     _save_state(_STATE)
                     self._send(200, json.dumps({"zinute": "Stalas perleistas.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     return
@@ -983,9 +1008,13 @@ class CloudHandler(BaseHTTPRequestHandler):
         self._send(404, b'{"klaida":"Not found"}', "application/json")
 
 
+class _CloudHTTPServer(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def main():
-    srv = ThreadingHTTPServer(("0.0.0.0", PORT), CloudHandler)
-    print(f"Model MI Cloud Kasa veikia ant 0.0.0.0:{PORT}")
+    srv = _CloudHTTPServer(("0.0.0.0", PORT), CloudHandler)
     srv.serve_forever()
 
 
