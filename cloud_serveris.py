@@ -9,6 +9,7 @@ Palaiko:
   - GET  /health         : Serverio būsena
 """
 
+import hashlib
 import json
 import os
 import queue
@@ -49,10 +50,15 @@ def _load_state() -> Dict:
                     d.setdefault("next_id", 1)
                     d.setdefault("menu", DEFAULT_MENU)
                     d.setdefault("sandelis", [])
+                    d.setdefault("tinklas", {})
                     return d
         except Exception:
             pass
-    return {"orders": [], "next_id": 1, "menu": list(DEFAULT_MENU), "sandelis": []}
+    return {"orders": [], "next_id": 1, "menu": list(DEFAULT_MENU), "sandelis": [], "tinklas": {}}
+
+
+def _tinklas_key_hash(raw_key: str) -> str:
+    return hashlib.sha256((raw_key or "").strip().encode("utf-8")).hexdigest()[:32]
 
 
 def _save_state(state: Dict) -> None:
@@ -78,8 +84,6 @@ def _svc_state() -> Dict:
                 {"id": "mgr", "vardas": "Vadybininkas", "pin": "0000", "role": "vadybininkas", "aktyvus": True},
             ],
             "work_hours": {"ijungta": True, "pradzia": "08:00", "pabaiga": "22:00"},
-            "cash_rounding": False,
-            "shift_payments": [],
             "tables": [
                 {
                     "id": f"t{i}", "nr": i, "pavadinimas": f"Stalas {i}",
@@ -91,46 +95,7 @@ def _svc_state() -> Dict:
             ],
         }
         _STATE["service"] = svc
-    svc.setdefault("cash_rounding", False)
-    svc.setdefault("shift_payments", [])
     return svc
-
-
-def _svc_round_5ct(suma: float) -> float:
-    from decimal import Decimal, ROUND_HALF_UP
-    d = Decimal(str(round(float(suma or 0.0), 2)))
-    if d <= Decimal("0.00"):
-        return 0.0
-    return float((d / Decimal("0.05")).quantize(Decimal("1"), rounding=ROUND_HALF_UP) * Decimal("0.05"))
-
-
-def _svc_shift_summary(svc: dict, uid: str, is_mgr: bool = False) -> dict:
-    today = datetime.now().strftime("%Y-%m-%d")
-    rows = [p for p in (svc.get("shift_payments") or []) if str(p.get("date") or "") == today]
-    by_staff = {}
-    for p in rows:
-        sid = str(p.get("staff_id") or "")
-        rec = by_staff.setdefault(sid, {
-            "id": sid, "vardas": str(p.get("staff_name") or "Nežinomas"),
-            "count": 0, "cash": 0.0, "card": 0.0, "rounding_diff": 0.0, "total": 0.0,
-        })
-        rec["count"] += 1
-        rec["cash"] = round(rec["cash"] + float(p.get("cash_amount") or 0.0), 2)
-        rec["card"] = round(rec["card"] + float(p.get("card_amount") or 0.0), 2)
-        rec["rounding_diff"] = round(rec["rounding_diff"] + float(p.get("rounding_diff") or 0.0), 2)
-        rec["total"] = round(rec["total"] + float(p.get("paid_total") or 0.0), 2)
-    my = dict(by_staff.get(uid) or {"id": uid, "vardas": "", "count": 0, "cash": 0.0, "card": 0.0, "rounding_diff": 0.0, "total": 0.0})
-    out = {"date": today, "my": my}
-    if is_mgr:
-        out["by_staff"] = list(by_staff.values())
-        out["grand"] = {
-            "count": sum(r["count"] for r in by_staff.values()),
-            "cash": round(sum(r["cash"] for r in by_staff.values()), 2),
-            "card": round(sum(r["card"] for r in by_staff.values()), 2),
-            "rounding_diff": round(sum(r["rounding_diff"] for r in by_staff.values()), 2),
-            "total": round(sum(r["total"] for r in by_staff.values()), 2),
-        }
-    return out
 
 
 def _svc_after_hours(wh: dict) -> tuple:
@@ -661,6 +626,34 @@ class CloudHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"viso_aktyviu": len(akt_out), "uzsakymai": akt_out}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
+        if path == "/api/tinklas/suvestine":
+            if not self._check_auth(parsed):
+                self._send(401, b'{"klaida":"Unauthorized"}', "application/json")
+                return
+            qs = urllib.parse.parse_qs(parsed.query)
+            net_key = str(self.headers.get("X-Network-Key") or (qs.get("tinklo_raktas") or [""])[0]).strip()
+            if len(net_key) < 4:
+                self._send(400, json.dumps({"klaida": "Reikalingas tinklo raktas (min 4 simb.)."}).encode("utf-8"), "application/json")
+                return
+            kh = _tinklas_key_hash(net_key)
+            now_ts = datetime.now().timestamp()
+            with _LOCK:
+                tinklas_map = _STATE.get("tinklas") or {}
+                branches_raw = dict(tinklas_map.get(kh) or {})
+            padaliniai = []
+            for pid, snap in branches_raw.items():
+                if not isinstance(snap, dict):
+                    continue
+                item = dict(snap)
+                item["padalinio_id"] = pid
+                srv_ts = float(item.get("_server_ts", 0.0) or 0.0)
+                item["online"] = (now_ts - srv_ts) <= 95.0
+                item["amzius_s"] = max(0, int(now_ts - srv_ts)) if srv_ts > 0 else 999999
+                padaliniai.append(item)
+            padaliniai.sort(key=lambda x: str(x.get("pavadinimas", x.get("padalinio_id", ""))).lower())
+            self._send(200, json.dumps({"padaliniai": padaliniai}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
         if path == "/api/stalai":
             if not self._check_auth(parsed):
                 self._send(401, b'{"klaida":"Unauthorized"}', "application/json")
@@ -683,8 +676,6 @@ class CloudHandler(BaseHTTPRequestHandler):
                 res = {
                     "user": {"id": user["id"], "vardas": user["vardas"], "role": user["role"]},
                     "tables": tables_out, "work_hours": svc.get("work_hours", {}),
-                    "cash_rounding": bool(svc.get("cash_rounding", False)),
-                    "shift_summary": _svc_shift_summary(svc, user["id"], is_mgr),
                     "after_hours": ah, "after_hours_msg": ah_msg,
                     "staff_names": [{"id": s["id"], "vardas": s["vardas"], "role": s["role"]} for s in svc["staff"] if s.get("aktyvus", True)],
                 }
@@ -719,6 +710,40 @@ class CloudHandler(BaseHTTPRequestHandler):
                 _save_state(_STATE)
             _broadcast_sse(ev_id, payload)
             self._send(200, json.dumps({"sekme": True, "ev_id": ev_id, "zinute": "Priimta į Cloud"}).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
+        if parsed.path == "/api/tinklas/suvestine":
+            if not isinstance(payload, dict):
+                self._send(400, b'{"klaida":"Neteisingas formatas"}', "application/json")
+                return
+            net_key = str(self.headers.get("X-Network-Key") or payload.get("tinklo_raktas") or "").strip()
+            pid = str(payload.get("padalinio_id") or "").strip()
+            if len(net_key) < 4 or not pid:
+                self._send(400, json.dumps({"klaida": "Reikalingas tinklo_raktas ir padalinio_id"}).encode("utf-8"), "application/json")
+                return
+            kh = _tinklas_key_hash(net_key)
+            clean_snap = {
+                "padalinio_id": pid,
+                "pavadinimas": str(payload.get("pavadinimas") or pid)[:80],
+                "timestamp": str(payload.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                "siandien_apyvarta": round(float(payload.get("siandien_apyvarta") or 0.0), 2),
+                "siandien_savikaina": round(float(payload.get("siandien_savikaina") or 0.0), 2),
+                "siandien_pelnas": round(float(payload.get("siandien_pelnas") or 0.0), 2),
+                "siandien_marza_pct": round(float(payload.get("siandien_marza_pct") or 0.0), 1),
+                "siandien_cekiai": int(payload.get("siandien_cekiai") or 0),
+                "vidutinis_cekis": round(float(payload.get("vidutinis_cekis") or 0.0), 2),
+                "aktyvus_uzsakymai": int(payload.get("aktyvus_uzsakymai") or 0),
+                "kritiniai_likuciai_kiekis": int(payload.get("kritiniai_likuciai_kiekis") or 0),
+                "kritiniai_likuciai_sarasas": list(payload.get("kritiniai_likuciai_sarasas") or [])[:15],
+                "top_patiekalai": list(payload.get("top_patiekalai") or [])[:8],
+                "_server_ts": datetime.now().timestamp(),
+            }
+            with _LOCK:
+                tinklas_map = _STATE.setdefault("tinklas", {})
+                group = tinklas_map.setdefault(kh, {})
+                group[pid] = clean_snap
+                _save_state(_STATE)
+            self._send(200, json.dumps({"sekme": True, "padalinio_id": pid}).encode("utf-8"), "application/json; charset=utf-8")
             return
 
         if parsed.path == "/api/meniu":
@@ -765,34 +790,6 @@ class CloudHandler(BaseHTTPRequestHandler):
                         svc["work_hours"] = payload["work_hours"]
                     if isinstance(payload.get("staff"), list):
                         svc["staff"] = [s for s in payload["staff"] if s.get("vardas") and s.get("pin")]
-                    if "cash_rounding" in payload:
-                        svc["cash_rounding"] = bool(payload.get("cash_rounding"))
-                    if isinstance(payload.get("tables"), list):
-                        ex_map = {str(t.get("id")): t for t in (svc.get("tables") or [])}
-                        new_t = []
-                        seen = set()
-                        for idx, item in enumerate(payload["tables"], start=1):
-                            if not isinstance(item, dict):
-                                continue
-                            tid_i = str(item.get("id") or f"t{idx}_{uuid.uuid4().hex[:4]}").strip()
-                            if not tid_i or tid_i in seen:
-                                tid_i = f"t{idx}_{uuid.uuid4().hex[:4]}"
-                            seen.add(tid_i)
-                            pav = str(item.get("pavadinimas") or f"Stalas {idx}").strip() or f"Stalas {idx}"
-                            zona = str(item.get("zona") or "Salė").strip() or "Salė"
-                            pid = str(item.get("padavejas_id") or "").strip()
-                            prev = ex_map.get(tid_i)
-                            if prev:
-                                u = dict(prev)
-                                u.update({"nr": idx, "pavadinimas": pav, "zona": zona, "padavejas_id": pid})
-                                new_t.append(u)
-                            else:
-                                new_t.append({"id": tid_i, "nr": idx, "pavadinimas": pav, "zona": zona, "padavejas_id": pid, "atidare_id": "", "status": "laisvas", "sveciu_sk": 0, "opened_at": "", "checks": []})
-                        for oid, ot in ex_map.items():
-                            if oid not in seen and ot.get("status") != "laisvas":
-                                oc = dict(ot); oc["nr"] = len(new_t) + 1; new_t.append(oc)
-                        if new_t:
-                            svc["tables"] = new_t
                     if isinstance(payload.get("table_assignments"), dict):
                         for tid, pid in payload["table_assignments"].items():
                             for t in svc["tables"]:
@@ -959,52 +956,12 @@ class CloudHandler(BaseHTTPRequestHandler):
 
                 if parsed.path == "/api/stalai/apmoketi":
                     chk = next((c for c in t["checks"] if c["id"] == payload.get("check_id")), None)
-                    paid_total, raw_total, cash_amt, card_amt, round_diff = 0.0, 0.0, 0.0, 0.0, 0.0
-                    budas = str(payload.get("mokejimo_budas") or "Kortele").strip()
                     if chk:
-                        raw_total = round(sum(float(it.get("kiekis") or 0) * float(it.get("kaina") or 0) for it in (chk.get("items") or []) if it.get("status") != "voided"), 2)
-                        rounding_on = bool(svc.get("cash_rounding", False))
-                        bl = budas.lower()
-                        if "mišr" in bl or "misr" in bl:
-                            budas = "Mišrus"
-                            card_amt = round(max(0.0, float(payload.get("kortele_suma") or 0.0)), 2)
-                            rem = round(max(0.0, raw_total - card_amt), 2)
-                            cash_amt = _svc_round_5ct(rem) if (rounding_on and rem > 0) else rem
-                            paid_total = round(card_amt + cash_amt, 2)
-                            round_diff = round(cash_amt - rem, 2)
-                        elif "gryn" in bl:
-                            budas = "Grynais"
-                            paid_total = _svc_round_5ct(raw_total) if rounding_on else raw_total
-                            cash_amt = paid_total
-                            round_diff = round(paid_total - raw_total, 2)
-                        else:
-                            budas = "Kortele"
-                            paid_total = raw_total
-                            card_amt = raw_total
                         chk["status"] = "apmoketas"
-                        chk["mokejimo_budas"] = budas
-                        now_dt = datetime.now()
-                        svc.setdefault("shift_payments", []).append({
-                            "ts": now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-                            "date": now_dt.strftime("%Y-%m-%d"),
-                            "staff_id": user["id"], "staff_name": user["vardas"],
-                            "table_name": t["pavadinimas"], "check_name": chk["pavadinimas"],
-                            "method": budas, "raw_total": raw_total, "paid_total": paid_total,
-                            "cash_amount": cash_amt, "card_amount": card_amt, "rounding_diff": round_diff,
-                        })
-                        if len(svc["shift_payments"]) > 500:
-                            svc["shift_payments"] = svc["shift_payments"][-500:]
-                    closed_t = False
                     if all(c.get("status") == "apmoketas" for c in t["checks"]):
                         t["status"] = "laisvas"; t["atidare_id"] = ""; t["sveciu_sk"] = 0; t["opened_at"] = ""; t["checks"] = []
-                        closed_t = True
                     _save_state(_STATE)
-                    self._send(200, json.dumps({
-                        "zinute": f"{'Stalas uždarytas' if closed_t else 'Čekis apmokėtas'} ({paid_total:.2f} €, {budas}).",
-                        "table_closed": closed_t,
-                        "paid_total": paid_total,
-                        "stalas": _svc_serialize_table(t, smap),
-                    }, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    self._send(200, json.dumps({"zinute": "Apmokėta.", "stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     return
 
                 if parsed.path == "/api/stalai/perleisti":
