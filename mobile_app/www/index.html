@@ -1603,7 +1603,7 @@ function activeSandelis() {
 function findSandPrice(name) {
   const low = cleanProdName(name).toLowerCase();
   const it = (sandelisItems || []).find(s => cleanProdName(s.pavadinimas).toLowerCase() === low);
-  return it ? {kaina: Number(it.kaina || 0), unit: String(it.mat_vnt || "kg").toLowerCase()} : {kaina: 0, unit: "kg"};
+  return it ? {kaina: Number(it.sandelio_kaina ?? it.kaina ?? 0), unit: String(it.mat_vnt || "kg").toLowerCase()} : {kaina: 0, unit: "kg"};
 }
 function toBaseQty(qty, vnt) {
   const u = String(vnt || "g").toLowerCase();
@@ -1620,7 +1620,7 @@ function renderReplaceSelects() {
     : `<option value="">-- Nėra receptūros --</option>`;
   const avail = activeSandelis();
   document.getElementById("selRepNew").innerHTML = avail.length
-    ? avail.map(s => { const nm = cleanProdName(s.pavadinimas); return `<option value="${nm}" data-price="${Number(s.kaina||0)}" data-unit="${s.mat_vnt||'kg'}">${nm}</option>`; }).join("")
+    ? avail.map(s => { const nm = cleanProdName(s.pavadinimas); return `<option value="${nm}" data-price="${Number(s.sandelio_kaina ?? s.kaina ?? 0)}" data-unit="${s.mat_vnt||'kg'}">${nm}</option>`; }).join("")
     : `<option value="">-- Sandėlyje nėra likučių --</option>`;
   syncMiSelect("selRepOrig");
   syncMiSelect("selRepNew");
@@ -1651,7 +1651,7 @@ function renderSandelisSelect() {
   sel.innerHTML = list.length
     ? list.map(s => {
         const nm = cleanProdName(s.pavadinimas);
-        return `<option value="${nm}" data-price="${Number(s.kaina||0)}" data-unit="${s.mat_vnt||'vnt'}">${nm}</option>`;
+        return `<option value="${nm}" data-price="${Number(s.sandelio_kaina ?? s.kaina ?? 0)}" data-unit="${s.mat_vnt||'vnt'}">${nm}</option>`;
       }).join("")
     : `<option value="">-- Sandėlyje nėra likučių --</option>`;
   onSelectSandAddon();
@@ -1665,8 +1665,8 @@ function onSelectSandAddon() {
   const subUnit = u === "kg" ? "g" : u === "l" ? "ml" : "vnt";
   document.getElementById("lblAddonUnit").textContent = subUnit;
   const qEl = document.getElementById("inpAddonQty");
-  if (subUnit === "vnt") { qEl.step = "1"; qEl.value = "1"; }
-  else { qEl.step = "1"; qEl.value = "10"; }
+  qEl.step = "1";
+  qEl.value = "0";
   recalcAddonPrice();
 }
 function recalcAddonPrice() {
