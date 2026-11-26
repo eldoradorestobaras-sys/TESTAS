@@ -2062,7 +2062,6 @@ function openReceiptModal(i) {
   document.getElementById("recModalActions").innerHTML = `
     <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'atsaukti')">🗑️ Nurašyti</button>
     <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
-    <button class="btn" style="flex:0.8;" onclick="closeReceiptModal()">Uždaryti</button>
   `;
   document.getElementById("receiptModal").classList.add("open");
   clearInterval(window._recTimerTick);
