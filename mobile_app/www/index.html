@@ -1596,7 +1596,9 @@ function cleanProdName(n) {
   return String(n || "").replace(/_{1,2}(l|vnt|kg)$/i, "").trim();
 }
 function activeSandelis() {
-  return (sandelisItems || []).filter(s => Number(s.kiekis ?? s.likutis ?? 0) > 0.0001);
+  return (sandelisItems || []).filter(s =>
+    (s.kiekis === undefined && s.likutis === undefined) ? true : Number(s.kiekis ?? s.likutis ?? 0) > 0.0001
+  );
 }
 function findSandPrice(name) {
   const low = cleanProdName(name).toLowerCase();
