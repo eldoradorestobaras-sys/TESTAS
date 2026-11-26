@@ -742,6 +742,30 @@ class CloudHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"sekme": True, "viso_patiekalu": len(clean_menu)}).encode("utf-8"), "application/json; charset=utf-8")
             return
 
+        if parsed.path == "/api/sandelis":
+            raw_sand = payload.get("sandelis") if isinstance(payload, dict) else None
+            if not isinstance(raw_sand, list):
+                self._send(400, b'{"klaida":"Reikalingas sandelio sarasas"}', "application/json")
+                return
+            clean_sand = []
+            for s in raw_sand:
+                if not isinstance(s, dict):
+                    continue
+                pav = str(s.get("pavadinimas") or "").strip()
+                if not pav:
+                    continue
+                clean_sand.append({
+                    "pavadinimas": pav,
+                    "mat_vnt": str(s.get("mat_vnt") or "vnt"),
+                    "kaina": round(float(s.get("kaina") or 0.0), 2),
+                    "pvm": round(float(s.get("pvm") if s.get("pvm") is not None else 21.0), 2),
+                })
+            with _LOCK:
+                _STATE["sandelis"] = clean_sand
+                _save_state(_STATE)
+            self._send(200, json.dumps({"sekme": True, "viso_prekiu": len(clean_sand)}).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
         if parsed.path in ("/api/uzsakymas", "/api/order", "/webhook"):
             with _LOCK:
                 ev_id = int(_STATE.get("next_id", 1))
