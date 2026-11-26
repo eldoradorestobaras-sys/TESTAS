@@ -1108,22 +1108,23 @@ async function setPosSubTab(tab) {
   document.getElementById("posSubProducts")?.classList.toggle("active", tab === "products");
   const catsEl = document.getElementById("catsRow");
   if (catsEl) catsEl.style.display = tab === "dishes" ? "flex" : "none";
+  renderMenu();
   if (tab === "products") {
-    const lan = cleanUrl(cfg.lanUrl);
-    if (lan) {
+    for (const u of svcBaseUrls()) {
       try {
-        const rs = await fetchTimeout(lan + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000);
+        const rs = await fetchTimeout(u + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, u === _effectiveCloudUrl() ? 12000 : 2500);
         if (rs.ok) {
           const jss = await rs.json();
-          if (Array.isArray(jss.sandelis)) {
+          if (Array.isArray(jss.sandelis) && jss.sandelis.length) {
             sandelisItems = jss.sandelis;
             localStorage.setItem("mi_app_sandelis", JSON.stringify(sandelisItems));
+            if (posSubTab === "products") renderMenu();
+            break;
           }
         }
       } catch {}
     }
   }
-  renderMenu();
 }
 
 function renderMenu() {
@@ -1142,7 +1143,7 @@ function renderMenu() {
           ${qTxt ? `<div class="dish-top" style="justify-content:flex-end;"><span style="background:var(--amber);color:#0B0D12;font-weight:900;font-size:11px;padding:1px 7px;border-radius:999px;">${qTxt}</span></div>` : ''}
           <div class="dish-name">${dispName}</div>
           <div class="row-between">
-            <span style="font-size:11px;color:var(--muted);">${Number(p.kiekis || 0).toFixed(2)} ${vnt}</span>
+            <span style="font-size:11px;color:var(--muted);">${p.kiekis !== undefined ? Number(p.kiekis || 0).toFixed(2) + ' ' : ''}${vnt}</span>
             <span class="dish-price">${Number(p.kaina || 0).toFixed(2)} €/${vnt}</span>
           </div>
         </div>`;
