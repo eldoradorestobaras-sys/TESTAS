@@ -2042,10 +2042,10 @@ async function syncRemoteData(notify=false) {
             const ing = ingInfo.map(x => x.pav);
             const zRaw = String(m.zona || k.zona || (m.tipas === "baras" ? "baras" : (m.tipas === "dienos" ? "dienos" : ""))).trim();
             const zNorm = zRaw.toLowerCase();
-            const zCode = zMap[zNorm] || (ZONOS[zNorm] ? zNorm : (m.tipas === "baras" ? "baras" : (m.tipas === "dienos" ? "dienos" : "virtuve")));
+            const zCode = zMap[zNorm] || ((ZONOS[zNorm] && zNorm !== "virtuve") ? zNorm : (m.tipas === "baras" ? "baras" : (m.tipas === "dienos" ? "dienos" : "g")));
             const katAuto = (m.tipas === "baras" || zCode === "baras") ? "Baras"
               : (m.tipas === "dienos" || zCode === "dienos") ? "Dienos pietūs"
-              : (ZONOS[zCode] ? ZONOS[zCode].pav : "Virtuvė");
+              : (ZONOS[zCode] ? ZONOS[zCode].pav : "Grill");
             return {
               plu: m.plu || String(100 + idx),
               pavadinimas: m.pavadinimas || "Patiekalas",
@@ -2082,8 +2082,7 @@ async function syncRemoteData(notify=false) {
     renderTableDetail();
   }
   if (notify) {
-    if (gotMenu && gotSandelis) toast(`✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.`);
-    else if (gotMenu) toast(`✅ Meniu ir zonos įkelti (${menu.length} patiek.). Sandėliui reikalingas LAN.`);
+    if (gotMenu || gotSandelis) toast(`✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} prek.`);
     else toast("⚠️ Nepavyko pasiekti serverio", true);
   }
 }
@@ -2092,32 +2091,14 @@ function _calcLocalTimer(pav, sentAtStr) {
   const raw = String(pav || "").trim().toLowerCase();
   const clean = raw.replace(/\s*\(.*?\)/g, "").trim();
   const tm = kdsTimersMap[raw] || kdsTimersMap[clean];
-  if (tm && Number.isFinite(Number(tm.rem_sec))) {
-    const sec = Math.max(0, Math.floor(Number(tm.rem_sec)));
-    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
-    const ss = String(sec % 60).padStart(2, "0");
-    return {
-      inQueue: !!tm.in_queue,
-      sec,
-      label: tm.in_queue ? `⏳ Eilėje ~${mm}:${ss}` : (sec > 0 ? `⏱ Liko: ${mm}:${ss}` : "✅ Paruošta")
-    };
-  }
-  const s = String(sentAtStr || "").trim();
-  const m = s.match(/(\d{2}):(\d{2})(?::(\d{2}))?/);
-  if (!m) return null;
-  const now = new Date();
-  const sent = new Date(now.getFullYear(), now.getMonth(), now.getDate(), Number(m[1]), Number(m[2]), Number(m[3] || 0));
-  if (sent.getTime() - now.getTime() > 6 * 3600 * 1000) sent.setDate(sent.getDate() - 1);
-  const mObj = menu.find(x => String(x.pavadinimas || "").trim().toLowerCase() === raw || String(x.pavadinimas || "").trim().toLowerCase() === clean);
-  const prepMin = Number((mObj && mObj.gamybos_laikas_min) || ((mObj && mObj.zona === "baras") ? 3 : 10));
-  const elapsed = Math.max(0, Math.floor((now.getTime() - sent.getTime()) / 1000));
-  const rem = Math.max(0, Math.round(prepMin * 60) - elapsed);
-  const mm = String(Math.floor(rem / 60)).padStart(2, "0");
-  const ss = String(rem % 60).padStart(2, "0");
+  if (!tm || !Number.isFinite(Number(tm.rem_sec))) return null;
+  const sec = Math.max(0, Math.floor(Number(tm.rem_sec)));
+  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+  const ss = String(sec % 60).padStart(2, "0");
   return {
-    inQueue: false,
-    sec: rem,
-    label: rem > 0 ? `⏱ Liko: ${mm}:${ss}` : "✅ Paruošta"
+    inQueue: !!tm.in_queue,
+    sec,
+    label: tm.in_queue ? `⏳ Eilėje ~${mm}:${ss}` : (sec > 0 ? `⏱ Liko: ${mm}:${ss}` : "✅ Paruošta")
   };
 }
 
