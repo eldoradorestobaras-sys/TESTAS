@@ -1323,6 +1323,7 @@ function renderCart() {
             }
           </div>
           <b id="cartLineTot_${i}" style="min-width:58px;text-align:right;color:var(--amber);font-size:13px;flex-shrink:0;">${(c.kiekis*uPrice).toFixed(2)} €</b>
+          <button class="btn" style="padding:4px 8px;font-size:11px;color:#FCA5A5;flex-shrink:0;" onclick="removePosCartItem(${i})">✕</button>
         </div>
       </div>`;
   }).join("");
@@ -1346,8 +1347,8 @@ function renderCart() {
   if (kRow) kRow.style.display = needKitchenSend ? "grid" : "none";
   if (totRow) totRow.style.display = needKitchenSend ? "flex" : "none";
   if (pRow) pRow.style.display = needKitchenSend ? "none" : "flex";
-  if (cancelDirect) cancelDirect.style.display = hasKitchenDish ? "none" : "flex";
-  if (pRow) pRow.style.justifyContent = hasKitchenDish ? "flex-end" : "space-between";
+  if (cancelDirect) cancelDirect.style.display = "flex";
+  if (pRow) pRow.style.justifyContent = "space-between";
   const posClr = document.getElementById("posBarClearBtn");
   if (posClr) posClr.style.display = posOrderSentToKitchen ? "none" : "inline-block";
   renderMenu();
@@ -1516,7 +1517,45 @@ function openPosOrderModal() {
 function closePosOrderModal() {
   document.getElementById("posOrderModal").classList.remove("open");
 }
-function cancelPosOrder() {
+async function removePosCartItem(i) {
+  const it = cart[i];
+  if (!it) return;
+  if (posOrderSentToKitchen && posActiveKitchenCekis) {
+    const {data, laikas, timestamp} = nowParts();
+    await postWithFailover("/api/uzsakymas", {
+      veiksmas: "grazinti", cekio_nr: posActiveKitchenCekis,
+      pavadinimas: it.pavadinimas, kiekis: it.kiekis,
+      priezastis: "Pašalinta iš kasos užsakymo", data, laikas, timestamp
+    });
+    const rec = receipts.find(r => r.cekis === posActiveKitchenCekis && r.status === "Aktyvus");
+    if (rec) {
+      rec.items = (rec.items || []).filter(ri => ri.pavadinimas !== it.pavadinimas);
+      if (!rec.items.length) { rec.status = "Grąžinta"; rec.total = 0; }
+      else rec.total = rec.items.reduce((s, x) => s + Number(x.kiekis || 1) * Number(x.kaina || 0), 0);
+      localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+      renderReceipts();
+    }
+    loadKDS();
+  }
+  cart.splice(i, 1);
+  if (!cart.length) { posOrderSentToKitchen = false; posActiveKitchenCekis = null; }
+  renderCart();
+}
+async function cancelPosOrder() {
+  if (posOrderSentToKitchen && posActiveKitchenCekis) {
+    const {data, laikas, timestamp} = nowParts();
+    await postWithFailover("/api/uzsakymas", {
+      veiksmas: "grazinti", cekio_nr: posActiveKitchenCekis,
+      priezastis: "Atšaukta kasos užsakyme", data, laikas, timestamp
+    });
+    const rec = receipts.find(r => r.cekis === posActiveKitchenCekis && r.status === "Aktyvus");
+    if (rec) {
+      rec.status = "Grąžinta";
+      localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+      renderReceipts();
+    }
+    loadKDS();
+  }
   posOrderSentToKitchen = false;
   posActiveKitchenCekis = null;
   cart = [];
@@ -1742,23 +1781,16 @@ async function openTableModModal(itemId, focusPromo=false) {
 async function saveModModal() {
   if (modTableItemId) {
     const disc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
+    const akcTxt = document.getElementById("inpItemPromo").value.trim();
     const extraRep = (modDraft.pakeisti || []).reduce((s, x) => s + Number(x.kaina || 0), 0);
     const extraAdd = (modDraft.priedai || []).reduce((s, x) => s + Number(x.kaina || 0), 0);
     const base = disc > 0 ? Math.max(0, modDraft._basePrice * (1 - disc / 100)) : modDraft._basePrice;
     const newPrice = Math.max(0, base + extraRep + extraAdd);
-    const parts = [];
-    if (modDraft.neideti.length) parts.push("Be: " + modDraft.neideti.join(", "));
-    if (modDraft.pakeisti.length) parts.push("Pakeisti: " + modDraft.pakeisti.map(x => `${x.ka}->${x.ikuo}`).join(", "));
-    if (modDraft.priedai.length) parts.push("Priedai: " + modDraft.priedai.map(x => x.pavadinimas || x.pav).join(", "));
-    if (disc > 0) parts.push(`-${disc}%`);
-    const label = parts.length ? `${modDraft._baseName} (${parts.join("; ")})` : modDraft._baseName;
     try {
-      await svcCall("/api/stalai/anuliuoti", "POST", {
-        pin: waiterPin, table_id: activeTableId, check_id: activeCheckId, item_id: modTableItemId
-      });
-      await svcCall("/api/stalai/prideti", "POST", {
-        pin: waiterPin, table_id: activeTableId, check_id: activeCheckId,
-        pavadinimas: label, kiekis: modDraft._qty, kaina: newPrice, tipas: "patiekalas"
+      await svcCall("/api/stalai/modifikuoti", "POST", {
+        pin: waiterPin, table_id: activeTableId, check_id: activeCheckId, item_id: modTableItemId,
+        neideti: modDraft.neideti, pakeisti: modDraft.pakeisti, priedai: modDraft.priedai,
+        nuolaida_proc: disc, akcija: akcTxt, kaina: newPrice
       });
       modTableItemId = "";
       closeModModal();
@@ -1776,7 +1808,10 @@ async function saveModModal() {
   c.akcija = document.getElementById("inpItemPromo").value.trim();
   if (newProc !== oldProc) {
     const mIt = menu.find(m => m.pavadinimas === c.pavadinimas);
-    if (mIt) mIt.akcija_proc = newProc;
+    if (mIt) {
+      mIt.akcija_proc = newProc;
+      localStorage.setItem("mi_app_menu", JSON.stringify(menu));
+    }
     postWithFailover("/api/akcija", {pavadinimas: c.pavadinimas, nuolaida_proc: newProc}).catch(() => {});
     renderMenu();
   }
