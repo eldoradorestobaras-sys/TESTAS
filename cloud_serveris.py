@@ -15,9 +15,20 @@ import os
 import queue
 import threading
 import urllib.parse
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List
+
+try:
+    from zoneinfo import ZoneInfo
+    _LT_TZ = ZoneInfo("Europe/Vilnius")
+except Exception:
+    _LT_TZ = timezone(timedelta(hours=2))
+
+
+def _lt_now() -> datetime:
+    """Grąžina dabartinį Lietuvos laiką (Europe/Vilnius) be tzinfo, kad Render UTC nevėluotų 2 val."""
+    return datetime.now(_LT_TZ).replace(tzinfo=None)
 
 PORT = int(os.environ.get("PORT", os.environ.get("CLOUD_PORT", "10000")))
 DATA_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cloud_data.json")
@@ -104,7 +115,7 @@ def _svc_after_hours(wh: dict) -> tuple:
     try:
         sh, sm = [int(x) for x in str(wh.get("pradzia", "08:00")).split(":")]
         eh, em = [int(x) for x in str(wh.get("pabaiga", "22:00")).split(":")]
-        dt = datetime.now()
+        dt = _lt_now()
         cur = dt.hour * 60 + dt.minute
         s_m, e_m = sh * 60 + sm, eh * 60 + em
         inside = (s_m <= cur < e_m) if s_m <= e_m else (cur >= s_m or cur < e_m)
@@ -713,7 +724,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                 _STATE["next_id"] = ev_id + 1
                 rec = dict(payload)
                 rec["_ev_id"] = ev_id
-                rec.setdefault("timestamp", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+                rec.setdefault("timestamp", _lt_now().strftime("%Y-%m-%d %H:%M:%S"))
                 _STATE["orders"].append(rec)
                 _STATE["orders"] = _STATE["orders"][-300:]
                 _save_state(_STATE)
@@ -734,7 +745,7 @@ class CloudHandler(BaseHTTPRequestHandler):
             clean_snap = {
                 "padalinio_id": pid,
                 "pavadinimas": str(payload.get("pavadinimas") or pid)[:80],
-                "timestamp": str(payload.get("timestamp") or datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                "timestamp": str(payload.get("timestamp") or _lt_now().strftime("%Y-%m-%d %H:%M:%S")),
                 "pajamos_be_pvm": round(float(payload.get("pajamos_be_pvm") or 0.0), 2),
                 "siandien_apyvarta": round(float(payload.get("siandien_apyvarta") or 0.0), 2),
                 "siandien_savikaina": round(float(payload.get("siandien_savikaina") or 0.0), 2),
@@ -834,11 +845,11 @@ class CloudHandler(BaseHTTPRequestHandler):
                     if not t["checks"]:
                         t["atidare_id"] = user["id"]
                         t["sveciu_sk"] = max(1, int(payload.get("sveciu_sk") or 2))
-                        t["opened_at"] = datetime.now().strftime("%H:%M")
+                        t["opened_at"] = _lt_now().strftime("%H:%M")
                         t["checks"] = [{"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": "Sąskaita 1", "status": "atviras", "items": []}]
                         _save_state(_STATE)
                     elif t.get("status") == "laisvas":
-                        t["opened_at"] = datetime.now().strftime("%H:%M")
+                        t["opened_at"] = _lt_now().strftime("%H:%M")
                         _save_state(_STATE)
                     self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     return
@@ -850,7 +861,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                     if not t["checks"]:
                         t["atidare_id"] = user["id"]
                         t["sveciu_sk"] = 2
-                        t["opened_at"] = datetime.now().strftime("%H:%M")
+                        t["opened_at"] = _lt_now().strftime("%H:%M")
                         t["checks"] = [{"id": f"chk_{uuid.uuid4().hex[:6]}", "pavadinimas": "Sąskaita 1", "status": "atviras", "items": []}]
                     chk = next((c for c in t["checks"] if c["id"] == payload.get("check_id")), None) or t["checks"][0]
                     qty = float(payload.get("kiekis") or 1)
@@ -893,12 +904,12 @@ class CloudHandler(BaseHTTPRequestHandler):
                     cekio_nr = f"T{t['nr']}-{batch_id}"
                     ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
                     sse_pay = {
-                        "cekio_nr": cekio_nr, "data": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                        "cekio_nr": cekio_nr, "data": _lt_now().strftime("%Y-%m-%d %H:%M:%S"),
                         "stalas": t["pavadinimas"], "padavejas": user["vardas"],
                         "elementai": [{"pavadinimas": it["pavadinimas"], "kiekis": it["kiekis"], "kaina": it["kaina"], "tipas": it.get("tipas", "patiekalas")} for it in drafts],
                     }
                     for it in drafts:
-                        it["status"] = "sent"; it["sent_at"] = datetime.now().strftime("%H:%M:%S"); it["batch_id"] = cekio_nr
+                        it["status"] = "sent"; it["sent_at"] = _lt_now().strftime("%H:%M:%S"); it["batch_id"] = cekio_nr
                     t["status"] = "uzimtas"
                     rec = dict(sse_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = sse_pay["data"]
                     _STATE["orders"].append(rec); _STATE["orders"] = _STATE["orders"][-300:]
@@ -927,7 +938,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                         t["status"] = "laisvas"; t["opened_at"] = ""; t["checks"] = []
                     ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
                     v_pay = {"veiksmas": "grazinti", "cekio_nr": it.get("batch_id") or f"T{t['nr']}", "pavadinimas": it["pavadinimas"], "kiekis": it["kiekis"], "priezastis": payload.get("priezastis", "")}
-                    rec = dict(v_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    rec = dict(v_pay); rec["_ev_id"] = ev_id; rec["timestamp"] = _lt_now().strftime("%Y-%m-%d %H:%M:%S")
                     _STATE["orders"].append(rec); _STATE["orders"] = _STATE["orders"][-300:]
                     _save_state(_STATE)
                     _broadcast_sse(ev_id, v_pay)
