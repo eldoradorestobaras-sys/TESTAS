@@ -1371,6 +1371,14 @@ function isAfterWorkHoursNow() {
   }
 }
 
+function buildItemMods(c) {
+  return [
+    ...(c.neideti || []).map(x => ({pavadinimas: "Be " + x, tipas: "isimti"})),
+    ...(c.pakeisti || []).map(x => ({pavadinimas: `keisti ${x.orig || x.ka || ""} į ${x.naujas || x.ikuo || ""}`, kaina: Number(x.kaina || 0)})),
+    ...(c.priedai || []).map(x => ({pavadinimas: x.pavadinimas, kiekis: Number(x.kiekis || 1), kaina: Number(x.kaina || 0), tipas: "prideti"}))
+  ];
+}
+
 async function sendPosToKitchen() {
   if (!cart.length) return;
   if (!waiterPin || !waiterState) {
@@ -1383,12 +1391,19 @@ async function sendPosToKitchen() {
     return;
   }
   const targetTid = (document.getElementById("posTargetTable")?.value || "").trim();
+  const note = document.getElementById("inpNote").value.trim();
+  const orderDisc = Number(document.getElementById("inpOrderDisc").value || 0);
   if (targetTid && waiterPin) {
     try {
       for (const c of cart) {
         await svcCall("/api/stalai/prideti", "POST", {
           pin: waiterPin, table_id: targetTid, check_id: "",
-          pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c), tipas: "patiekalas"
+          pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c), tipas: "patiekalas",
+          neideti: c.neideti || [], pakeisti: c.pakeisti || [], priedai: c.priedai || [],
+          modifikacijos: buildItemMods(c),
+          nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
+          akcija: c.akcija || (orderDisc > 0 ? `Čekio nuolaida -${orderDisc}%` : ""),
+          komentaras: note
         });
       }
       const res = await svcCall("/api/stalai/siusti", "POST", {
@@ -1425,15 +1440,16 @@ async function sendPosToKitchen() {
   }
   const cekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
   const {data, laikas, timestamp} = nowParts();
-  const note = document.getElementById("inpNote").value.trim();
-  const orderDisc = Number(document.getElementById("inpOrderDisc").value || 0);
+  const orderPromo = orderDisc > 0 ? `Čekio nuolaida -${orderDisc}%` : "";
   const payload = {
     cekio_nr: cekis, data, laikas, timestamp,
-    mokejimo_budas: "neapmoketas", pastaba: note, nuolaida_proc: orderDisc,
+    mokejimo_budas: "neapmoketas", pastaba: note, nuolaida_proc: orderDisc, akcija: orderPromo,
     elementai: cart.map(c => ({
       kodas: c.plu || "", pavadinimas: c.pavadinimas, kiekis: c.kiekis,
       kaina: Number(c.kaina || 0), pradine_kaina: Number(c.kaina || 0),
-      komentaras: note, nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc
+      komentaras: note, modifikacijos: buildItemMods(c),
+      nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
+      akcija: c.akcija || orderPromo
     }))
   };
   const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
@@ -1442,8 +1458,12 @@ async function sendPosToKitchen() {
   receipts = receipts.slice(0, 40);
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   renderReceipts();
-  posOrderSentToKitchen = true;
-  posActiveKitchenCekis = cekis;
+  posOrderSentToKitchen = false;
+  posActiveKitchenCekis = null;
+  cart = [];
+  document.getElementById("inpNote").value = "";
+  document.getElementById("inpOrderDisc").value = "";
+  closePosOrderModal();
   renderCart();
   loadKDS();
   toast(res.ok ? (res.channel === "cloud" ? `☁️ #${cekis} išsiųsta į virtuvę per Cloud!` : `🏠 #${cekis} išsiųsta į virtuvę per LAN!`) : `📴 Nėra ryšio — #${cekis} įdėta į eilę!`, !res.ok);
@@ -1456,7 +1476,9 @@ async function onPosTableChange() {
     for (const c of cart) {
       await svcCall("/api/stalai/prideti", "POST", {
         pin: waiterPin, table_id: targetTid, check_id: "",
-        pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c), tipas: "patiekalas"
+        pavadinimas: c.pavadinimas, kiekis: c.kiekis, kaina: calcItemUnit(c), tipas: "patiekalas",
+        neideti: c.neideti || [], pakeisti: c.pakeisti || [], priedai: c.priedai || [],
+        modifikacijos: buildItemMods(c)
       });
     }
     const res = await svcCall("/api/stalai/siusti", "POST", {
@@ -1868,11 +1890,7 @@ async function sendOrder(pay) {
     cekio_nr: cekis, data, laikas, timestamp,
     mokejimo_budas: pay, pastaba: note, nuolaida_proc: orderDisc, akcija: orderPromo,
     elementai: cart.map(c => {
-      const mods = [
-        ...(c.neideti || []).map(x => ({pavadinimas: "Be " + x, tipas: "isimti"})),
-        ...(c.pakeisti || []).map(x => ({pavadinimas: `keisti ${x.orig} į ${x.naujas}`, kaina: Number(x.kaina || 0)})),
-        ...(c.priedai || []).map(x => ({pavadinimas: x.pavadinimas, kiekis: Number(x.kiekis || 1), kaina: Number(x.kaina || 0), tipas: "prideti"}))
-      ];
+      const mods = buildItemMods(c);
       return {
         kodas: c.plu || "",
         pavadinimas: c.pavadinimas,
@@ -2125,19 +2143,55 @@ async function syncRemoteData(notify=false) {
   }
 }
 
+function _parseSentDate(sentAtStr) {
+  const s = String(sentAtStr || "").trim();
+  if (!s) return null;
+  if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(s)) {
+    const d = new Date(s.replace(" ", "T"));
+    if (!isNaN(d.getTime())) return d;
+  }
+  const m = s.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if (m) {
+    const d = new Date();
+    d.setHours(Number(m[1]), Number(m[2]), Number(m[3] || 0), 0);
+    if (d.getTime() - Date.now() > 6 * 3600 * 1000) d.setDate(d.getDate() - 1);
+    return d;
+  }
+  return null;
+}
+
 function _calcLocalTimer(pav, sentAtStr) {
   const raw = String(pav || "").trim().toLowerCase();
   const clean = raw.replace(/\s*\(.*?\)/g, "").trim();
   const tm = kdsTimersMap[raw] || kdsTimersMap[clean];
-  if (!tm || !Number.isFinite(Number(tm.rem_sec))) return null;
-  const sec = Math.max(0, Math.floor(Number(tm.rem_sec)));
-  const mm = String(Math.floor(sec / 60)).padStart(2, "0");
-  const ss = String(sec % 60).padStart(2, "0");
-  return {
-    inQueue: !!tm.in_queue,
-    sec,
-    label: tm.in_queue ? `⏳ Eilėje ~${mm}:${ss}` : (sec > 0 ? `⏱ Liko: ${mm}:${ss}` : "✅ Paruošta")
-  };
+  if (tm && Number.isFinite(Number(tm.rem_sec))) {
+    const sec = Math.max(0, Math.floor(Number(tm.rem_sec)));
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return {
+      inQueue: !!tm.in_queue,
+      sec,
+      label: tm.in_queue ? `⏳ Eilėje ~${mm}:${ss}` : (sec > 0 ? `⏱ Liko: ${mm}:${ss}` : "✅ Paruošta")
+    };
+  }
+  const mObj = menu.find(m => {
+    const mp = String(m.pavadinimas || "").trim().toLowerCase();
+    return mp === raw || mp === clean;
+  });
+  const prepMin = Number((mObj && mObj.gamybos_laikas_min) || 0);
+  const sentDt = _parseSentDate(sentAtStr);
+  if (prepMin > 0 && sentDt) {
+    const elapsedSec = Math.max(0, Math.floor((Date.now() - sentDt.getTime()) / 1000));
+    const sec = Math.max(0, Math.round(prepMin * 60) - elapsedSec);
+    const mm = String(Math.floor(sec / 60)).padStart(2, "0");
+    const ss = String(sec % 60).padStart(2, "0");
+    return {
+      inQueue: false,
+      sec,
+      label: sec > 0 ? `⏱ Liko: ${mm}:${ss}` : "✅ Paruošta"
+    };
+  }
+  return null;
 }
 
 let kdsTimersMap = {};
@@ -2546,10 +2600,16 @@ function openTableOrderModal() {
   document.getElementById("tableOrderModal").classList.add("open");
   loadKDS();
   clearInterval(window._tblTimerTick);
+  let _tickN = 0;
   window._tblTimerTick = setInterval(() => {
-    if (document.getElementById("tableOrderModal")?.classList.contains("open")) loadKDS();
-    else clearInterval(window._tblTimerTick);
-  }, 2000);
+    if (!document.getElementById("tableOrderModal")?.classList.contains("open")) {
+      clearInterval(window._tblTimerTick);
+      return;
+    }
+    _tickN++;
+    renderTableDetail();
+    if (_tickN % 4 === 0) loadKDS();
+  }, 1000);
 }
 function closeTableOrderModal() {
   clearInterval(window._tblTimerTick);
