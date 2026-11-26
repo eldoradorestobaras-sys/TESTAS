@@ -1958,11 +1958,12 @@ function renderReceipts() {
 /* Sinchronizacija su Model MI (/api/meniu ir /api/sandelis) — tik paspaudus mygtuką */
 async function syncRemoteData(notify=false) {
   if (!notify) return;
-  const urls = svcBaseUrls();
+  const lan = cleanUrl(cfg.lanUrl), cloud = _effectiveCloudUrl();
+  const urls = [];
+  if (cfg.mode !== "cloud" && lan) urls.push(lan);
+  if (cfg.mode !== "lan" && cloud && !urls.includes(cloud)) urls.push(cloud);
   let gotMenu = false;
-  for (const base of urls) {
-    const u = cleanUrl(base);
-    if (!u) continue;
+  for (const u of urls) {
     try {
       const [rm, rs] = await Promise.all([
         fetchTimeout(u + "/api/meniu?source=model_mi", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000),
@@ -1972,6 +1973,16 @@ async function syncRemoteData(notify=false) {
         const js = await rm.json();
         const list = js.meniu || js.menu || [];
         if (list.length) {
+          const zMap = {
+            "s": "s", "salti": "s", "šalti": "s", "salotos": "s", "salti patiekalai": "s", "šalti patiekalai": "s",
+            "v": "v", "virykle": "v", "viryklė": "v",
+            "g": "g", "grill": "g", "grilis": "g",
+            "k": "k", "konvekcine": "k", "konvekcinė": "k", "konvekcine krosnis": "k", "konvekcinė krosnis": "k",
+            "p": "p", "picos": "p", "picu": "p", "picų": "p", "pica": "p",
+            "f": "f", "fri": "f", "fri zona": "f", "gruzdintuve": "f", "gruzdintuvė": "f",
+            "baras": "baras", "b": "baras",
+            "dienos": "dienos", "d": "dienos", "dienos pietus": "dienos", "dienos pietūs": "dienos"
+          };
           menu = list.map((m, idx) => {
             const k = m.kortele || {};
             const rawList = Array.isArray(k.produktai) ? k.produktai : (Array.isArray(k.ingredientai) ? k.ingredientai : (m.ingredientai || []));
@@ -1984,15 +1995,17 @@ async function syncRemoteData(notify=false) {
               };
             }).filter(x => x.pav);
             const ing = ingInfo.map(x => x.pav);
-            const zLow = String(m.zona || "").trim().toLowerCase();
-            const katAuto = (m.tipas === "baras" || zLow === "baras") ? "Baras"
-              : (m.tipas === "dienos" || zLow === "dienos") ? "Dienos pietūs"
-              : (zLow === "s" ? "Šalti" : "Karšti");
+            const zRaw = String(m.zona || k.zona || (m.tipas === "baras" ? "baras" : (m.tipas === "dienos" ? "dienos" : ""))).trim();
+            const zNorm = zRaw.toLowerCase();
+            const zCode = zMap[zNorm] || (ZONOS[zNorm] ? zNorm : (m.tipas === "baras" ? "baras" : (m.tipas === "dienos" ? "dienos" : "virtuve")));
+            const katAuto = (m.tipas === "baras" || zCode === "baras") ? "Baras"
+              : (m.tipas === "dienos" || zCode === "dienos") ? "Dienos pietūs"
+              : (ZONOS[zCode] ? ZONOS[zCode].pav : "Virtuvė");
             return {
               plu: m.plu || String(100 + idx),
               pavadinimas: m.pavadinimas || "Patiekalas",
               kat: katAuto,
-              zona: m.zona || (m.tipas === "baras" ? "baras" : "virtuve"),
+              zona: zCode,
               kaina: Number(m.kaina || 0),
               akcija_proc: Number(m.akcija_proc || 0),
               ingredientai: ing,
@@ -2015,8 +2028,13 @@ async function syncRemoteData(notify=false) {
       if (gotMenu) break;
     } catch {}
   }
+  activeCat = "Visi";
+  if (typeof tblCat !== "undefined") tblCat = "Visi";
   renderMenu();
-  if (notify) toast(gotMenu ? `✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.` : "⚠️ Nepavyko pasiekti meniu", !gotMenu);
+  if (typeof renderTableDetail === "function" && typeof curTableNr !== "undefined" && curTableNr) {
+    renderTableDetail();
+  }
+  if (notify) toast(gotMenu ? `✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.` : "⚠️ Nepavyko pasiekti Model MI (LAN)", !gotMenu);
 }
 
 let kdsTimersMap = {};
