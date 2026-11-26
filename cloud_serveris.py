@@ -735,6 +735,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                     "akcija_proc": round(float(m.get("akcija_proc") or 0.0), 2),
                     "zona": str(m.get("zona") or "g"),
                     "gamybos_laikas_min": round(float(m.get("gamybos_laikas_min") or 10.0), 2),
+                    "ingredientai": list(m.get("ingredientai") or []),
                 })
             with _LOCK:
                 _STATE["menu"] = clean_menu
@@ -758,6 +759,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                     "pavadinimas": pav,
                     "mat_vnt": str(s.get("mat_vnt") or "vnt"),
                     "kaina": round(float(s.get("kaina") or 0.0), 2),
+                    "sandelio_kaina": round(float(s.get("sandelio_kaina") if s.get("sandelio_kaina") is not None else (s.get("kaina") or 0.0)), 2),
                     "pvm": round(float(s.get("pvm") if s.get("pvm") is not None else 21.0), 2),
                 })
             with _LOCK:
