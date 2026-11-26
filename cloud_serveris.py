@@ -38,11 +38,11 @@ _LOCK = threading.RLock()
 _SSE_CLIENTS: List[queue.Queue] = []
 
 DEFAULT_MENU = [
-    {"plu": "101", "kat": "Virtuvė", "pavadinimas": "Jautienos mėsainis su čederio sūriu", "kaina": 14.00, "ingredientai": ["Jautienos kumpis", "Mėsainio bandelė", "Čederio sūris", "Pomidorai", "Svogūnai"]},
-    {"plu": "102", "kat": "Virtuvė", "pavadinimas": "Traškūs vištienos kepsneliai (paniruoti)", "kaina": 9.00, "ingredientai": ["Vištienos krūtinėlė", "Kiaušiniai", "Kvietiniai miltai", "Džiūvėsėliai"]},
-    {"plu": "103", "kat": "Virtuvė", "pavadinimas": "Vištienos kepsnys su bulvių koše", "kaina": 12.00, "ingredientai": ["Vištienos krūtinėlė", "Bulvės", "Sviestas", "Pienas"]},
-    {"plu": "104", "kat": "Virtuvė", "pavadinimas": "Cezario salotos su vištiena ir kiaušiniu", "kaina": 9.00, "ingredientai": ["Vištienos krūtinėlė", "Romaninės salotos", "Kiaušiniai", "Parmezano sūris", "Cezario padažas"]},
-    {"plu": "105", "kat": "Virtuvė", "pavadinimas": "Keptos tigrinės krevetės česnakiniame svieste", "kaina": 12.00, "ingredientai": ["Tigrinės krevetės", "Sviestas", "Česnakai", "Citrina"]},
+    {"plu": "101", "kat": "Grill", "zona": "g", "gamybos_laikas_min": 8, "pavadinimas": "Jautienos mėsainis su čederio sūriu", "kaina": 14.00, "ingredientai": ["Jautienos kumpis", "Mėsainio bandelė", "Čederio sūris", "Pomidorai", "Svogūnai"]},
+    {"plu": "102", "kat": "Fri", "zona": "f", "gamybos_laikas_min": 6, "pavadinimas": "Traškūs vištienos kepsneliai (paniruoti)", "kaina": 9.00, "ingredientai": ["Vištienos krūtinėlė", "Kiaušiniai", "Kvietiniai miltai", "Džiūvėsėliai"]},
+    {"plu": "103", "kat": "Konvekcinė", "zona": "k", "gamybos_laikas_min": 12, "pavadinimas": "Vištienos kepsnys su bulvių koše", "kaina": 12.00, "ingredientai": ["Vištienos krūtinėlė", "Bulvės", "Sviestas", "Pienas"]},
+    {"plu": "104", "kat": "Šalti", "zona": "s", "gamybos_laikas_min": 5, "pavadinimas": "Cezario salotos su vištiena ir kiaušiniu", "kaina": 9.00, "ingredientai": ["Vištienos krūtinėlė", "Romaninės salotos", "Kiaušiniai", "Parmezano sūris", "Cezario padažas"]},
+    {"plu": "105", "kat": "Viryklė", "zona": "v", "gamybos_laikas_min": 7, "pavadinimas": "Keptos tigrinės krevetės česnakiniame svieste", "kaina": 12.00, "ingredientai": ["Tigrinės krevetės", "Sviestas", "Česnakai", "Citrina"]},
     {"plu": "106", "kat": "Virtuvė", "pavadinimas": "Kiaulienos guliašas su morkomis", "kaina": 9.50, "ingredientai": ["Kiaulienos sprandinė", "Morkos", "Svogūnai", "Pomidorų pasta"]},
     {"plu": "201", "kat": "Iškraipyti (Mapping)", "pavadinimas": "Mėsainis čed. 1vnt", "kaina": 14.00, "ingredientai": []},
     {"plu": "202", "kat": "Iškraipyti (Mapping)", "pavadinimas": "Višt. kepsnel. panir.", "kaina": 9.00, "ingredientai": []},
@@ -717,6 +717,30 @@ class CloudHandler(BaseHTTPRequestHandler):
             return
         ln = int(self.headers.get("Content-Length", 0) or 0)
         payload = json.loads(self.rfile.read(ln).decode("utf-8")) if ln > 0 else {}
+
+        if parsed.path == "/api/meniu":
+            raw_menu = payload.get("meniu") if isinstance(payload, dict) else None
+            if not isinstance(raw_menu, list):
+                self._send(400, b'{"klaida":"Reikalingas meniu sarasas"}', "application/json")
+                return
+            clean_menu = []
+            for idx, m in enumerate(raw_menu):
+                if not isinstance(m, dict):
+                    continue
+                clean_menu.append({
+                    "plu": str(m.get("plu") or m.get("id") or (100 + idx)),
+                    "tipas": str(m.get("tipas") or "virtuve"),
+                    "pavadinimas": str(m.get("pavadinimas") or "Patiekalas"),
+                    "kaina": round(float(m.get("kaina") or 0.0), 2),
+                    "akcija_proc": round(float(m.get("akcija_proc") or 0.0), 2),
+                    "zona": str(m.get("zona") or "g"),
+                    "gamybos_laikas_min": round(float(m.get("gamybos_laikas_min") or 10.0), 2),
+                })
+            with _LOCK:
+                _STATE["menu"] = clean_menu
+                _save_state(_STATE)
+            self._send(200, json.dumps({"sekme": True, "viso_patiekalu": len(clean_menu)}).encode("utf-8"), "application/json; charset=utf-8")
+            return
 
         if parsed.path in ("/api/uzsakymas", "/api/order", "/webhook"):
             with _LOCK:
