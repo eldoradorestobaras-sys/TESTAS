@@ -1444,13 +1444,19 @@ async function sendPosToKitchen() {
   const payload = {
     cekio_nr: cekis, data, laikas, timestamp,
     mokejimo_budas: "neapmoketas", pastaba: note, nuolaida_proc: orderDisc, akcija: orderPromo,
-    elementai: cart.map(c => ({
-      kodas: c.plu || "", pavadinimas: c.pavadinimas, kiekis: c.kiekis,
-      kaina: Number(c.kaina || 0), pradine_kaina: Number(c.kaina || 0),
-      komentaras: note, modifikacijos: buildItemMods(c),
-      nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
-      akcija: c.akcija || orderPromo
-    }))
+    elementai: cart.map(c => {
+      const scaled = c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l");
+      return {
+        kodas: c.plu || "", pavadinimas: c.pavadinimas,
+        kiekis: scaled ? (c.kiekis / 1000.0) : c.kiekis,
+        kaina: scaled ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+        pradine_kaina: scaled ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+        mato_vnt: c.is_sandelis ? (c.orig_vnt || c.disp_vnt || "vnt") : undefined,
+        komentaras: note, modifikacijos: buildItemMods(c),
+        nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
+        akcija: c.akcija || orderPromo
+      };
+    })
   };
   const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
   const res = await postWithFailover("/api/uzsakymas", payload);
@@ -2015,7 +2021,10 @@ function renderReceipts() {
         <b>#${r.cekis} • ${r.data}</b>
         <b style="color:${r.status==='Aktyvus'?'var(--green)':(r.status==='Nurašyta'?'var(--red)':'var(--amber)')}">${r.status} • ${Number(r.total||0).toFixed(2)} €</b>
       </div>
-      <div style="font-size:12px;color:var(--muted);">${(r.items||[]).map(x => x.kiekis+'× '+x.pavadinimas).join(', ')}</div>
+      <div style="font-size:12px;color:var(--muted);">${(r.items||[]).map(x => {
+        const tm = r.status === "Aktyvus" ? _calcLocalTimer(x.pavadinimas, r.data) : null;
+        return `${x.kiekis}× ${x.pavadinimas}${tm ? ` <span style="color:${tm.sec===0?'var(--green)':'var(--amber)'};font-weight:700;">(${tm.label})</span>` : ""}`;
+      }).join(', ')}</div>
       <div class="row-between">
         <span style="font-size:11px;color:var(--amber);">${r.via==='cloud'?'☁️ Cloud':r.via==='lan'?'🏠 LAN':'📴 Eilė'}</span>
         <div style="display:flex;gap:6px;">
@@ -2027,22 +2036,27 @@ function renderReceipts() {
   `).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Čekių istorija tuščia.</div>`;
 }
 
+function _renderReceiptModalItems(r) {
+  document.getElementById("recModalItems").innerHTML = (r.items || []).map(it => {
+    const qty = Number(it.kiekis || 1);
+    const unit = Number(it.kaina || 0);
+    const tmHtml = r.status === "Aktyvus" ? _getDishTimerHtml(it.pavadinimas, r.data) : "";
+    return `<div class="cart-row" style="padding:8px 10px;">
+      <div class="row-between">
+        <div><b>${qty}× ${it.pavadinimas || ""}</b>${tmHtml}</div>
+        <b style="color:var(--amber);">${(qty * unit).toFixed(2)} €</b>
+      </div>
+    </div>`;
+  }).join("") || `<div style="color:var(--muted);font-size:12px;">Pozicijų sąrašas tuščias.</div>`;
+}
+
 function openReceiptModal(i) {
   const r = receipts[i];
   if (!r) return;
   document.getElementById("recModalTitle").textContent = `🧾 Čekis #${r.cekis}`;
   const viaTxt = r.via === "cloud" ? "☁️ Cloud" : (r.via === "lan" ? "🏠 LAN" : "📴 Eilė");
   document.getElementById("recModalMeta").textContent = `${r.data || ""} • ${r.status || ""} • ${viaTxt}${r.stalas ? " • " + r.stalas : ""}${r.pay ? " • " + r.pay : ""}`;
-  document.getElementById("recModalItems").innerHTML = (r.items || []).map(it => {
-    const qty = Number(it.kiekis || 1);
-    const unit = Number(it.kaina || 0);
-    return `<div class="cart-row" style="padding:8px 10px;">
-      <div class="row-between">
-        <b>${qty}× ${it.pavadinimas || ""}</b>
-        <b style="color:var(--amber);">${(qty * unit).toFixed(2)} €</b>
-      </div>
-    </div>`;
-  }).join("") || `<div style="color:var(--muted);font-size:12px;">Pozicijų sąrašas tuščias.</div>`;
+  _renderReceiptModalItems(r);
   document.getElementById("recModalTotal").textContent = `${Number(r.total || 0).toFixed(2)} €`;
   const dis = r.status !== "Aktyvus";
   document.getElementById("recModalActions").innerHTML = `
@@ -2051,8 +2065,21 @@ function openReceiptModal(i) {
     <button class="btn" style="flex:0.8;" onclick="closeReceiptModal()">Uždaryti</button>
   `;
   document.getElementById("receiptModal").classList.add("open");
+  clearInterval(window._recTimerTick);
+  if (r.status === "Aktyvus") {
+    window._recTimerTick = setInterval(() => {
+      if (!document.getElementById("receiptModal")?.classList.contains("open")) {
+        clearInterval(window._recTimerTick);
+        return;
+      }
+      _renderReceiptModalItems(r);
+    }, 1000);
+  }
 }
-function closeReceiptModal() { document.getElementById("receiptModal").classList.remove("open"); }
+function closeReceiptModal() {
+  clearInterval(window._recTimerTick);
+  document.getElementById("receiptModal").classList.remove("open");
+}
 
 /* Sinchronizacija su Model MI (/api/meniu ir /api/sandelis) — pirma Cloud, tada LAN (sandėliui) */
 async function syncRemoteData(notify=false) {
