@@ -984,6 +984,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                     if "neideti" in payload: it["neideti"] = list(payload.get("neideti") or [])
                     if "pakeisti" in payload: it["pakeisti"] = list(payload.get("pakeisti") or [])
                     if "priedai" in payload: it["priedai"] = list(payload.get("priedai") or [])
+                    if "modifikacijos" in payload: it["modifikacijos"] = list(payload.get("modifikacijos") or [])
                     if "nuolaida_proc" in payload: it["nuolaida_proc"] = max(0.0, min(100.0, float(payload.get("nuolaida_proc") or 0.0)))
                     if "akcija" in payload: it["akcija"] = str(payload.get("akcija") or "")
                     if "komentaras" in payload: it["komentaras"] = str(payload.get("komentaras") or "")
