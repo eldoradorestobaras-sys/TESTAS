@@ -2207,6 +2207,17 @@ async function loadKDS() {
     el.innerHTML = `<div style="color:#FCA5A5;text-align:center;padding:24px;">⚠️ Ryšio gedimas: nepavyko pasiekti Cloud serverio.</div>`;
     return;
   }
+  const lanUrlNow = cleanUrl(cfg.lanUrl);
+  if (lanUrlNow && cfg.mode !== "cloud") {
+    fetchTimeout(lanUrlNow + "/api/aktyvus", { headers }, 2000)
+      .then(r => r.ok ? r.json() : null)
+      .then(j => {
+        if (j && j.laikai && typeof j.laikai === "object") {
+          kdsTimersMap = j.laikai;
+          if (document.getElementById("tableOrderModal")?.classList.contains("open")) renderTableDetail();
+        }
+      }).catch(() => {});
+  }
   document.getElementById("kdsCnt").textContent = list.length ? ` (${list.length})` : "";
   el.innerHTML = list.map(u => {
     const zm = getZoneMeta(u.zona);
@@ -2536,9 +2547,9 @@ function openTableOrderModal() {
   loadKDS();
   clearInterval(window._tblTimerTick);
   window._tblTimerTick = setInterval(() => {
-    if (document.getElementById("tableOrderModal")?.classList.contains("open")) renderTableDetail();
+    if (document.getElementById("tableOrderModal")?.classList.contains("open")) loadKDS();
     else clearInterval(window._tblTimerTick);
-  }, 1000);
+  }, 2000);
 }
 function closeTableOrderModal() {
   clearInterval(window._tblTimerTick);
