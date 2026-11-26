@@ -768,6 +768,25 @@ class CloudHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"sekme": True, "viso_prekiu": len(clean_sand)}).encode("utf-8"), "application/json; charset=utf-8")
             return
 
+        if parsed.path in ("/api/akcija", "/api/promo"):
+            if not isinstance(payload, dict):
+                self._send(400, b'{"klaida":"Neteisingas formatas"}', "application/json")
+                return
+            pav = str(payload.get("pavadinimas") or "").strip()
+            proc = max(0.0, min(100.0, float(payload.get("nuolaida_proc") or 0.0)))
+            with _LOCK:
+                for m in (_STATE.get("menu") or []):
+                    if isinstance(m, dict) and str(m.get("pavadinimas") or "").strip().lower() == pav.lower():
+                        m["akcija_proc"] = round(proc, 2)
+                ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
+                ak_pay = {"veiksmas": "akcija", "pavadinimas": pav, "nuolaida_proc": round(proc, 2), "timestamp": _lt_now().strftime("%Y-%m-%d %H:%M:%S")}
+                rec = dict(ak_pay); rec["_ev_id"] = ev_id
+                _STATE["orders"].append(rec); _STATE["orders"] = _STATE["orders"][-300:]
+                _save_state(_STATE)
+            _broadcast_sse(ev_id, ak_pay)
+            self._send(200, json.dumps({"sekme": True, "pavadinimas": pav, "nuolaida_proc": proc}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
         if parsed.path in ("/api/uzsakymas", "/api/order", "/webhook"):
             with _LOCK:
                 ev_id = int(_STATE.get("next_id", 1))
@@ -934,10 +953,33 @@ class CloudHandler(BaseHTTPRequestHandler):
                             "kiekis": round(qty, 3),
                             "kaina": round(kaina_in, 2),
                             "tipas": str(payload.get("tipas") or "patiekalas"),
+                            "neideti": list(payload.get("neideti") or []),
+                            "pakeisti": list(payload.get("pakeisti") or []),
+                            "priedai": list(payload.get("priedai") or []),
+                            "nuolaida_proc": float(payload.get("nuolaida_proc") or 0.0),
+                            "akcija": str(payload.get("akcija") or ""),
+                            "komentaras": str(payload.get("komentaras") or ""),
                             "status": "draft", "sent_at": "", "batch_id": "",
                         })
                     has_sent = any((it.get("status") or "draft") == "sent" for c in t["checks"] for it in c.get("items", []))
                     t["status"] = ("saskaita" if t.get("status") == "saskaita" else "uzimtas") if has_sent else "laisvas"
+                    _save_state(_STATE)
+                    self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+                    return
+
+                if parsed.path == "/api/stalai/modifikuoti":
+                    chk = next((c for c in t["checks"] if c["id"] == payload.get("check_id")), None)
+                    it = next((x for x in (chk or {}).get("items", []) if x["item_id"] == payload.get("item_id")), None)
+                    if not it:
+                        self._send(400, json.dumps({"klaida": "Pozicija nerasta."}).encode("utf-8"), "application/json")
+                        return
+                    if "neideti" in payload: it["neideti"] = list(payload.get("neideti") or [])
+                    if "pakeisti" in payload: it["pakeisti"] = list(payload.get("pakeisti") or [])
+                    if "priedai" in payload: it["priedai"] = list(payload.get("priedai") or [])
+                    if "nuolaida_proc" in payload: it["nuolaida_proc"] = max(0.0, min(100.0, float(payload.get("nuolaida_proc") or 0.0)))
+                    if "akcija" in payload: it["akcija"] = str(payload.get("akcija") or "")
+                    if "komentaras" in payload: it["komentaras"] = str(payload.get("komentaras") or "")
+                    if "kaina" in payload: it["kaina"] = round(max(0.0, float(payload.get("kaina") or 0.0)), 2)
                     _save_state(_STATE)
                     self._send(200, json.dumps({"stalas": _svc_serialize_table(t, smap)}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
                     return
@@ -956,7 +998,18 @@ class CloudHandler(BaseHTTPRequestHandler):
                     sse_pay = {
                         "cekio_nr": cekio_nr, "data": _lt_now().strftime("%Y-%m-%d %H:%M:%S"),
                         "stalas": t["pavadinimas"], "padavejas": user["vardas"],
-                        "elementai": [{"pavadinimas": it["pavadinimas"], "kiekis": it["kiekis"], "kaina": it["kaina"], "tipas": it.get("tipas", "patiekalas")} for it in drafts],
+                        "elementai": [{
+                            "pavadinimas": it["pavadinimas"],
+                            "kiekis": it["kiekis"],
+                            "kaina": it["kaina"],
+                            "tipas": it.get("tipas", "patiekalas"),
+                            "neideti": list(it.get("neideti") or []),
+                            "pakeisti": list(it.get("pakeisti") or []),
+                            "priedai": list(it.get("priedai") or []),
+                            "nuolaida_proc": float(it.get("nuolaida_proc") or 0.0),
+                            "akcija": str(it.get("akcija") or ""),
+                            "komentaras": str(it.get("komentaras") or ""),
+                        } for it in drafts],
                     }
                     for it in drafts:
                         it["status"] = "sent"; it["sent_at"] = _lt_now().strftime("%H:%M:%S"); it["batch_id"] = cekio_nr
