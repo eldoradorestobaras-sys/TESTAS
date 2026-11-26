@@ -1998,21 +1998,23 @@ function openReceiptModal(i) {
 }
 function closeReceiptModal() { document.getElementById("receiptModal").classList.remove("open"); }
 
-/* Sinchronizacija su Model MI (/api/meniu ir /api/sandelis) — tik paspaudus mygtuką */
+/* Sinchronizacija su Model MI (/api/meniu ir /api/sandelis) — pirma Cloud, tada LAN (sandėliui) */
 async function syncRemoteData(notify=false) {
   if (!notify) return;
-  const lan = cleanUrl(cfg.lanUrl), cloud = _effectiveCloudUrl();
+  const cloud = _effectiveCloudUrl(), lan = cleanUrl(cfg.lanUrl);
   const urls = [];
-  if (cfg.mode !== "cloud" && lan) urls.push(lan);
-  if (cfg.mode !== "lan" && cloud && !urls.includes(cloud)) urls.push(cloud);
+  if (cfg.mode !== "lan" && cloud) urls.push(cloud);
+  if (cfg.mode !== "cloud" && lan && !urls.includes(lan)) urls.push(lan);
   let gotMenu = false;
+  let gotSandelis = false;
   for (const u of urls) {
     try {
+      const ms = (u === cloud) ? 15000 : 3000;
       const [rm, rs] = await Promise.all([
-        fetchTimeout(u + "/api/meniu?source=model_mi", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000),
-        fetchTimeout(u + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 3000).catch(() => null)
+        fetchTimeout(u + "/api/meniu?source=model_mi", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, ms),
+        fetchTimeout(u + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 2500).catch(() => null)
       ]);
-      if (rm.ok) {
+      if (rm.ok && !gotMenu) {
         const js = await rm.json();
         const list = js.meniu || js.menu || [];
         if (list.length) {
@@ -2067,9 +2069,10 @@ async function syncRemoteData(notify=false) {
         if (Array.isArray(jss.sandelis) && jss.sandelis.length) {
           sandelisItems = jss.sandelis;
           localStorage.setItem("mi_app_sandelis", JSON.stringify(sandelisItems));
+          gotSandelis = true;
         }
       }
-      if (gotMenu) break;
+      if (gotMenu && gotSandelis) break;
     } catch {}
   }
   activeCat = "Visi";
@@ -2078,7 +2081,11 @@ async function syncRemoteData(notify=false) {
   if (typeof renderTableDetail === "function" && typeof curTableNr !== "undefined" && curTableNr) {
     renderTableDetail();
   }
-  if (notify) toast(gotMenu ? `✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.` : "⚠️ Nepavyko pasiekti Model MI (LAN)", !gotMenu);
+  if (notify) {
+    if (gotMenu && gotSandelis) toast(`✅ Sinchronizuota: ${menu.length} patiek., ${sandelisItems.length} sandėlio prek.`);
+    else if (gotMenu) toast(`✅ Meniu ir zonos įkelti (${menu.length} patiek.). Sandėliui reikalingas LAN.`);
+    else toast("⚠️ Nepavyko pasiekti serverio", true);
+  }
 }
 
 function _calcLocalTimer(pav, sentAtStr) {
