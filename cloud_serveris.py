@@ -936,16 +936,23 @@ class CloudHandler(BaseHTTPRequestHandler):
                     qty = float(payload.get("kiekis") or 1)
                     pav_in = str(payload.get("pavadinimas") or "").strip()
                     kaina_in = float(payload.get("kaina") or 0)
+                    mods_in = list(payload.get("modifikacijos") or []) if isinstance(payload.get("modifikacijos"), list) else []
+                    neideti_in = list(payload.get("neideti") or [])
+                    pakeisti_in = list(payload.get("pakeisti") or [])
+                    priedai_in = list(payload.get("priedai") or [])
+                    has_custom_mods = bool(mods_in or neideti_in or pakeisti_in or priedai_in)
                     merged = False
-                    for i_it, it in enumerate(chk["items"]):
-                        if it.get("status") == "draft" and str(it.get("pavadinimas", "")).lower() == pav_in.lower() and abs(float(it.get("kaina", 0)) - kaina_in) < 0.005:
-                            nq = round(float(it["kiekis"]) + qty, 3)
-                            if nq <= 0:
-                                chk["items"].pop(i_it)
-                            else:
-                                it["kiekis"] = nq
-                            merged = True
-                            break
+                    if not has_custom_mods:
+                        for i_it, it in enumerate(chk["items"]):
+                            it_has_mods = bool(it.get("modifikacijos") or it.get("neideti") or it.get("pakeisti") or it.get("priedai"))
+                            if not it_has_mods and it.get("status") == "draft" and str(it.get("pavadinimas", "")).lower() == pav_in.lower() and abs(float(it.get("kaina", 0)) - kaina_in) < 0.005:
+                                nq = round(float(it["kiekis"]) + qty, 3)
+                                if nq <= 0:
+                                    chk["items"].pop(i_it)
+                                else:
+                                    it["kiekis"] = nq
+                                merged = True
+                                break
                     if not merged and qty > 0:
                         chk["items"].append({
                             "item_id": f"it_{uuid.uuid4().hex[:8]}",
@@ -953,9 +960,10 @@ class CloudHandler(BaseHTTPRequestHandler):
                             "kiekis": round(qty, 3),
                             "kaina": round(kaina_in, 2),
                             "tipas": str(payload.get("tipas") or "patiekalas"),
-                            "neideti": list(payload.get("neideti") or []),
-                            "pakeisti": list(payload.get("pakeisti") or []),
-                            "priedai": list(payload.get("priedai") or []),
+                            "neideti": neideti_in,
+                            "pakeisti": pakeisti_in,
+                            "priedai": priedai_in,
+                            "modifikacijos": mods_in,
                             "nuolaida_proc": float(payload.get("nuolaida_proc") or 0.0),
                             "akcija": str(payload.get("akcija") or ""),
                             "komentaras": str(payload.get("komentaras") or ""),
@@ -995,6 +1003,24 @@ class CloudHandler(BaseHTTPRequestHandler):
                     batch_id = uuid.uuid4().hex[:6].upper()
                     cekio_nr = f"T{t['nr']}-{batch_id}"
                     ev_id = int(_STATE.get("next_id", 1)); _STATE["next_id"] = ev_id + 1
+                    def _build_el_mods(it):
+                        mods = []
+                        for x in (it.get("neideti") or []):
+                            if x:
+                                mods.append({"pavadinimas": f"Be {x}", "tipas": "isimti"})
+                        for x in (it.get("pakeisti") or []):
+                            if isinstance(x, dict):
+                                orig = x.get("orig") or x.get("ka") or ""
+                                nauj = x.get("naujas") or x.get("ikuo") or ""
+                                if orig or nauj:
+                                    mods.append({"pavadinimas": f"keisti {orig} į {nauj}", "kaina": float(x.get("kaina") or 0)})
+                        for x in (it.get("priedai") or []):
+                            if isinstance(x, dict) and x.get("pavadinimas"):
+                                mods.append({"pavadinimas": x["pavadinimas"], "kiekis": float(x.get("kiekis") or 1), "kaina": float(x.get("kaina") or 0), "tipas": "prideti"})
+                        if mods:
+                            return mods
+                        return list(it.get("modifikacijos") or [])
+
                     sse_pay = {
                         "cekio_nr": cekio_nr, "data": _lt_now().strftime("%Y-%m-%d %H:%M:%S"),
                         "stalas": t["pavadinimas"], "padavejas": user["vardas"],
@@ -1006,6 +1032,7 @@ class CloudHandler(BaseHTTPRequestHandler):
                             "neideti": list(it.get("neideti") or []),
                             "pakeisti": list(it.get("pakeisti") or []),
                             "priedai": list(it.get("priedai") or []),
+                            "modifikacijos": _build_el_mods(it),
                             "nuolaida_proc": float(it.get("nuolaida_proc") or 0.0),
                             "akcija": str(it.get("akcija") or ""),
                             "komentaras": str(it.get("komentaras") or ""),
