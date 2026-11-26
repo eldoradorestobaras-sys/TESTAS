@@ -1818,6 +1818,7 @@ async function saveModModal() {
       await svcCall("/api/stalai/modifikuoti", "POST", {
         pin: waiterPin, table_id: activeTableId, check_id: activeCheckId, item_id: modTableItemId,
         neideti: modDraft.neideti, pakeisti: modDraft.pakeisti, priedai: modDraft.priedai,
+        modifikacijos: buildItemMods(modDraft),
         nuolaida_proc: disc, akcija: akcTxt, kaina: newPrice
       });
       modTableItemId = "";
