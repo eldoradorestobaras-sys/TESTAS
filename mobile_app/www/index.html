@@ -2385,7 +2385,7 @@ async function loadKDS() {
         list = [];
         for (const o of raw.slice().reverse()) {
           const v = String(o.veiksmas || "").toLowerCase();
-          if (["atsaukti", "grazinti", "nurasyti"].includes(v)) continue;
+          if (["atsaukti", "grazinti", "nurasyti", "akcija", "promo"].includes(v)) continue;
           const cnr = String(o.cekio_nr || "");
           if (voidedAll.has(cnr)) continue;
           const tsRaw = String(o.timestamp || o.data || "");
