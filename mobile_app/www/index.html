@@ -521,7 +521,7 @@
         <span style="font-size:12.5px;font-weight:800;color:var(--muted);">IŠSIŲSTI ČEKIAI</span>
         <button class="btn" style="padding:6px 12px;font-size:12px;" onclick="clearInactiveReceipts()">Išvalyti neaktyvius</button>
       </div>
-      <div id="receiptsList" class="list-pane"></div>
+      <div id="receiptsList" class="list-pane" style="gap:14px;padding:12px;"></div>
     </div>
 
     <!-- GAMYBA / KDS -->
@@ -2017,7 +2017,7 @@ async function writeOffCart() {
   };
   const res = await postWithFailover("/api/uzsakymas", payload);
   cart = []; renderCart();
-  if (res.ok) toast(`🗑️ Nurašyta per ${res.channel.toUpperCase()}!`);
+  if (res.ok) toast(`Nurašyta per ${res.channel.toUpperCase()}!`);
   else {
     offlineQueue.push(payload);
     localStorage.setItem("mi_app_queue", JSON.stringify(offlineQueue));
@@ -2069,7 +2069,7 @@ async function cancelOrRefund(i, op) {
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   renderReceipts();
   loadKDS();
-  if (res.ok) toast((op === "atsaukti" ? "🗑️ #" : "↩️ #") + r.cekis + ` ${r.status.toLowerCase()} per ${res.channel.toUpperCase()}!`);
+  if (res.ok) toast((op === "atsaukti" ? "#" : "↩️ #") + r.cekis + ` ${r.status.toLowerCase()} per ${res.channel.toUpperCase()}!`);
   else {
     offlineQueue.push(payload);
     localStorage.setItem("mi_app_queue", JSON.stringify(offlineQueue));
@@ -2084,31 +2084,38 @@ function clearInactiveReceipts() {
   renderReceipts();
   loadKDS();
   const removed = before - receipts.length;
-  toast(removed > 0 ? `🧹 Išvalyta neaktyvių čekių: ${removed}` : "Neaktyvių čekių nėra.");
+  toast(removed > 0 ? `Išvalyta neaktyvių čekių: ${removed}` : "Neaktyvių čekių nėra.");
 }
 
 function renderReceipts() {
   document.getElementById("recCnt").textContent = receipts.length ? ` (${receipts.length})` : "";
-  document.getElementById("receiptsList").innerHTML = receipts.map((r, i) => `
-    <div class="glass-card" style="cursor:pointer;" onclick="openReceiptModal(${i})">
+  document.getElementById("receiptsList").innerHTML = receipts.map((r, i) => {
+    const isAct = r.status === "Aktyvus";
+    const isUnpaid = isAct && r.paid === false;
+    const isPaid = isAct && r.paid !== false;
+    const cardStyle = isUnpaid
+      ? "cursor:pointer;gap:10px;border:1px solid rgba(236,72,153,0.55);box-shadow:0 0 16px rgba(236,72,153,0.28), 0 4px 16px rgba(0,0,0,0.45);background:rgba(236,72,153,0.08);"
+      : (isPaid
+        ? "cursor:pointer;gap:10px;border:1px solid rgba(102,187,106,0.55);box-shadow:0 0 16px rgba(102,187,106,0.25), 0 4px 16px rgba(0,0,0,0.45);background:rgba(102,187,106,0.07);"
+        : "cursor:pointer;gap:10px;");
+    return `
+    <div class="glass-card" style="${cardStyle}" onclick="openReceiptModal(${i})">
       <div class="row-between">
         <b>#${r.cekis} • ${r.data}</b>
-        <b style="color:${r.status==='Aktyvus'?'var(--green)':(r.status==='Nurašyta'?'var(--red)':'var(--amber)')}">${r.status} • ${Number(r.total||0).toFixed(2)} €</b>
+        <b style="color:${isAct?(isUnpaid?'#F472B6':'var(--green)'):(r.status==='Nurašyta'?'var(--red)':'var(--amber)')}">${isUnpaid ? 'Neapmokėtas' : r.status} • ${Number(r.total||0).toFixed(2)} €</b>
       </div>
       <div style="font-size:12px;color:var(--muted);">${(r.items||[]).map(x => {
-        const tm = r.status === "Aktyvus" ? _calcLocalTimer(x.pavadinimas, r.data) : null;
+        const tm = isAct ? _calcLocalTimer(x.pavadinimas, r.data) : null;
         return `${x.kiekis}× ${x.pavadinimas}${tm ? ` <span style="color:${tm.sec===0?'var(--green)':'var(--amber)'};font-weight:700;">(${tm.label})</span>` : ""}`;
       }).join(', ')}</div>
-      <div class="row-between">
-        <span style="font-size:11px;color:var(--amber);">${r.via==='cloud'?'☁️ Cloud':r.via==='lan'?'🏠 LAN':'📴 Eilė'}${r.status==='Aktyvus'?(r.paid===false?' • <span style="color:#FCA5A5;">Neapmokėtas</span>':(r.pay?` • ✅ ${r.pay}`:'')):''}</span>
-        <div style="display:flex;gap:6px;">
-          ${(r.status==='Aktyvus' && r.paid===false) ? `<button class="btn btn-green" style="flex:0 0 auto;padding:7px 11px;font-size:12px;" onclick="event.stopPropagation();openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
-          <button class="btn btn-red" style="flex:0 0 auto;padding:7px 11px;font-size:12px;${r.status!=='Aktyvus'?'opacity:0.4;pointer-events:none;':''}" ${r.status!=='Aktyvus'?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'atsaukti')">🗑️ Nurašyti</button>
-          <button class="btn btn-amber" style="flex:0 0 auto;padding:7px 11px;font-size:12px;${r.status!=='Aktyvus'?'opacity:0.4;pointer-events:none;':''}" ${r.status!=='Aktyvus'?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
-        </div>
+      <div style="display:flex;gap:8px;width:100%;">
+        ${isUnpaid ? `<button class="btn btn-green" style="flex:1;padding:8px 6px;font-size:12px;" onclick="event.stopPropagation();openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
+        <button class="btn btn-red" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'atsaukti')">Nurašyti</button>
+        <button class="btn btn-amber" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
       </div>
     </div>
-  `).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Čekių istorija tuščia.</div>`;
+  `;
+  }).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Čekių istorija tuščia.</div>`;
 }
 
 function _renderReceiptModalItems(r) {
@@ -2129,15 +2136,15 @@ function openReceiptModal(i) {
   const r = receipts[i];
   if (!r) return;
   document.getElementById("recModalTitle").textContent = `🧾 Čekis #${r.cekis}`;
-  const viaTxt = r.via === "cloud" ? "☁️ Cloud" : (r.via === "lan" ? "🏠 LAN" : "📴 Eilė");
-  document.getElementById("recModalMeta").textContent = `${r.data || ""} • ${r.status || ""} • ${viaTxt}${r.stalas ? " • " + r.stalas : ""}${r.pay ? " • " + r.pay : ""}`;
+  const stTxt = (r.status === "Aktyvus" && r.paid === false) ? "Neapmokėtas" : (r.status || "");
+  document.getElementById("recModalMeta").textContent = `${r.data || ""} • ${stTxt}${r.stalas ? " • " + r.stalas : ""}${r.pay ? " • " + r.pay : ""}`;
   _renderReceiptModalItems(r);
   document.getElementById("recModalTotal").textContent = `${Number(r.total || 0).toFixed(2)} €`;
   const dis = r.status !== "Aktyvus";
   const needPay = r.status === "Aktyvus" && r.paid === false;
   document.getElementById("recModalActions").innerHTML = `
     ${needPay ? `<button class="btn btn-green" style="flex:1;" onclick="openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
-    <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'atsaukti')">🗑️ Nurašyti</button>
+    <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'atsaukti')">Nurašyti</button>
     <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
   `;
   document.getElementById("receiptModal").classList.add("open");
