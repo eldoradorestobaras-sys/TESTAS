@@ -2150,9 +2150,9 @@ function renderReceipts() {
         return `${x.kiekis}× ${x.pavadinimas}${tm ? ` <span style="color:${tm.sec===0?'var(--green)':'var(--amber)'};font-weight:700;">(${tm.label})</span>` : ""}`;
       }).join(', ')}</div>
       <div style="display:flex;gap:8px;width:100%;">
-        ${isUnpaid ? `<button class="btn btn-green" style="flex:1;padding:8px 6px;font-size:12px;" onclick="event.stopPropagation();openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
-        <button class="btn btn-amber" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();askCancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
         <button class="btn btn-red" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();askCancelOrRefund(${i},'atsaukti')">Nurašyti</button>
+        <button class="btn btn-amber" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();askCancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+        ${isUnpaid ? `<button class="btn btn-green" style="flex:1;padding:8px 6px;font-size:12px;" onclick="event.stopPropagation();openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
       </div>
     </div>
   `;
@@ -2184,9 +2184,9 @@ function openReceiptModal(i) {
   const dis = r.status !== "Aktyvus";
   const needPay = r.status === "Aktyvus" && r.paid === false;
   document.getElementById("recModalActions").innerHTML = `
-    ${needPay ? `<button class="btn btn-green" style="flex:1;" onclick="openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
-    <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();askCancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
     <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();askCancelOrRefund(${i},'atsaukti')">Nurašyti</button>
+    <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();askCancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+    ${needPay ? `<button class="btn btn-green" style="flex:1;" onclick="openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
   `;
   document.getElementById("receiptModal").classList.add("open");
   clearInterval(window._recTimerTick);
