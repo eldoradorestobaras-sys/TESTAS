@@ -787,6 +787,38 @@ class CloudHandler(BaseHTTPRequestHandler):
             self._send(200, json.dumps({"sekme": True, "pavadinimas": pav, "nuolaida_proc": proc}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
             return
 
+        if parsed.path in ("/api/akcija", "/api/promo"):
+            if not self._check_auth(parsed):
+                self._send(401, b'{"klaida":"Unauthorized"}', "application/json")
+                return
+            pav = str(payload.get("pavadinimas") or "").strip()
+            proc = max(0.0, min(100.0, float(payload.get("nuolaida_proc") or 0.0)))
+            if not pav:
+                self._send(400, b'{"klaida":"Truksta pavadinimo"}', "application/json")
+                return
+            with _LOCK:
+                for m in (_STATE.get("menu") or []):
+                    if isinstance(m, dict) and str(m.get("pavadinimas") or "").strip().lower() == pav.lower():
+                        m["akcija_proc"] = proc
+                ev_id = int(_STATE.get("next_id", 1))
+                _STATE["next_id"] = ev_id + 1
+                ts = _lt_now().strftime("%Y-%m-%d %H:%M:%S")
+                ev_pay = {
+                    "veiksmas": "akcija",
+                    "pavadinimas": pav,
+                    "nuolaida_proc": proc,
+                    "timestamp": ts,
+                    "data": ts,
+                }
+                rec = dict(ev_pay)
+                rec["_ev_id"] = ev_id
+                _STATE["orders"].append(rec)
+                _STATE["orders"] = _STATE["orders"][-300:]
+                _save_state(_STATE)
+            _broadcast_sse(ev_id, ev_pay)
+            self._send(200, json.dumps({"sekme": True, "pavadinimas": pav, "nuolaida_proc": proc}, ensure_ascii=False).encode("utf-8"), "application/json; charset=utf-8")
+            return
+
         if parsed.path in ("/api/uzsakymas", "/api/order", "/webhook"):
             with _LOCK:
                 ev_id = int(_STATE.get("next_id", 1))
