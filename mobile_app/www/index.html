@@ -1861,6 +1861,8 @@ function setItemDisc(p) {
   document.getElementById("inpItemDisc").value = p;
   if (p > 0 && !document.getElementById("inpItemPromo").value.trim()) {
     document.getElementById("inpItemPromo").value = `Akcija -${p}%`;
+  } else if (p <= 0) {
+    document.getElementById("inpItemPromo").value = "";
   }
 }
 let modTableItemId = "";
@@ -1920,7 +1922,7 @@ async function saveModModal() {
   const newProc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
   const oldProc = Number(c.nuolaida_proc || 0);
   c.nuolaida_proc = newProc;
-  c.akcija = document.getElementById("inpItemPromo").value.trim();
+  c.akcija = newProc > 0 ? (document.getElementById("inpItemPromo").value.trim() || `Akcija -${newProc}%`) : "";
   if (newProc !== oldProc) {
     const mIt = menu.find(m => m.pavadinimas === c.pavadinimas);
     if (mIt) {
