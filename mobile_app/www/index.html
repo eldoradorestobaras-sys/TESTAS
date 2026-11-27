@@ -684,6 +684,14 @@
       <span class="field-lbl">🔑 API Raktas (neprivaloma)</span>
       <input id="cfgKey" class="inp" placeholder="(neprivaloma)">
     </div>
+    <div>
+      <span class="field-lbl">🧾 Tikros kasos adresas (kvitui išmušti, neprivaloma)</span>
+      <input id="cfgExtPosUrl" class="inp" placeholder="http://192.168.1.50:8080/api/order">
+    </div>
+    <div>
+      <span class="field-lbl">🔐 Tikros kasos API raktas (neprivaloma)</span>
+      <input id="cfgExtPosKey" class="inp" placeholder="(neprivaloma)">
+    </div>
     <div id="diagBox" style="font-size:12px;color:var(--muted);background:rgba(255,255,255,0.04);padding:10px;border-radius:10px;">
       Paspauskite „Patikrinti“, kad matytumėte Cloud ir LAN būseną.
     </div>
@@ -782,7 +790,8 @@
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       <button class="btn btn-green" style="padding:14px;font-size:15px;" onclick="confirmPosPay('kortele')">💳 Kortele</button>
-      <button class="btn btn-amber" style="padding:14px;font-size:15px;" onclick="confirmPosPay('grynais')">💵 Grynais</button>
+      <button class="btn btn-amber" style="padding:14px;font-size:15px;" onclick="closePosPayModal();openPayModal('Grynais','pos')">💵 Grynais</button>
+      <button class="btn" style="padding:12px;font-size:14px;" onclick="closePosPayModal();openPayModal('Mišrus','pos')">🔀 Mišrus</button>
       <button class="btn" style="padding:10px;font-size:13px;" onclick="closePosPayModal()">Atgal</button>
     </div>
   </div>
@@ -967,7 +976,9 @@ let cfg = JSON.parse(localStorage.getItem("mi_app_cfg") || "null") || {
   mode: "auto",
   cloudUrl: "https://testas-azgh.onrender.com",
   lanUrl: defaultLan,
-  apiKey: ""
+  apiKey: "",
+  extPosUrl: "",
+  extPosKey: ""
 };
 let menu = (JSON.parse(localStorage.getItem("mi_app_menu") || "null") || DEFAULT_MENU).map(m => {
   if (m && m.kat === "Model MI Meniu") {
@@ -1601,10 +1612,30 @@ function openPosPayModal() {
 function closePosPayModal() {
   document.getElementById("posPayModal").classList.remove("open");
 }
-async function confirmPosPay(method) {
+async function confirmPosPay(method, extra={}) {
   closePosPayModal();
   closePosOrderModal();
-  await sendOrder(method);
+  await sendOrder(method, extra);
+}
+
+async function forwardToExternalPos(extPayload) {
+  const url = cleanUrl(cfg.extPosUrl || "");
+  if (!url) return null;
+  const hdrs = {"Content-Type": "application/json"};
+  const k = String(cfg.extPosKey || "").trim();
+  if (k) { hdrs["X-API-Key"] = k; hdrs["Authorization"] = "Bearer " + k; }
+  try {
+    const res = await fetchTimeout(url, { method: "POST", headers: hdrs, body: JSON.stringify(extPayload) }, 4000);
+    if (res.ok) {
+      toast("🧾 Čekis išsiųstas į tikrą kasą kvitui!");
+      return true;
+    }
+    toast(`⚠️ Tikra kasa atsakė HTTP ${res.status}`, true);
+    return false;
+  } catch (e) {
+    toast("⚠️ Nepavyko pasiekti tikros kasos kvitui", true);
+    return false;
+  }
 }
 
 /* Modifikatoriai */
@@ -1876,7 +1907,7 @@ async function applyTilePromo(proc) {
 }
 
 /* Užsakymai, Nurašymas, Grąžinimas */
-async function sendOrder(pay) {
+async function sendOrder(pay, extra={}) {
   if (!cart.length) return toast("Krepšelis tuščias!", true);
   if (!waiterPin || !waiterState) {
     toast("🔐 Pirma atrakinkite kasą PIN kodu!", true);
@@ -1892,10 +1923,12 @@ async function sendOrder(pay) {
   const note = document.getElementById("inpNote").value.trim();
   const orderDisc = Number(document.getElementById("inpOrderDisc").value || 0);
   const orderPromo = orderDisc > 0 ? `Čekio nuolaida -${orderDisc}%` : "";
+  const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
 
-  const payload = {
+  const payload = Object.assign({
     cekio_nr: cekis, data, laikas, timestamp,
     mokejimo_budas: pay, pastaba: note, nuolaida_proc: orderDisc, akcija: orderPromo,
+    suma: Math.round(total * 100) / 100,
     elementai: cart.map(c => {
       const mods = buildItemMods(c);
       return {
@@ -1911,11 +1944,10 @@ async function sendOrder(pay) {
         akcija: c.akcija || orderPromo
       };
     })
-  };
-  const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+  }, extra);
   const res = await postWithFailover("/api/uzsakymas", payload);
 
-  receipts.unshift({cekis, data: timestamp, total, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
+  receipts.unshift({cekis, data: timestamp, total, pay, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
   receipts = receipts.slice(0, 40);
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   posOrderSentToKitchen = false;
@@ -1930,6 +1962,7 @@ async function sendOrder(pay) {
     localStorage.setItem("mi_app_queue", JSON.stringify(offlineQueue));
     toast(`📴 Nėra ryšio — #${cekis} įrašytas į eilę!`, true);
   }
+  await forwardToExternalPos(payload);
   checkConnections(false);
 }
 
@@ -2375,6 +2408,8 @@ function _openSettingsModalReal() {
   document.getElementById("cfgCloud").value = cfg.cloudUrl;
   document.getElementById("cfgLan").value = cfg.lanUrl;
   document.getElementById("cfgKey").value = cfg.apiKey || "";
+  document.getElementById("cfgExtPosUrl").value = cfg.extPosUrl || "";
+  document.getElementById("cfgExtPosKey").value = cfg.extPosKey || "";
   document.getElementById("cfgModal").classList.add("open");
 }
 function closeSettings() { document.getElementById("cfgModal").classList.remove("open"); }
@@ -2383,7 +2418,9 @@ function saveSettings() {
     mode: document.getElementById("cfgMode").value,
     cloudUrl: cleanUrl(document.getElementById("cfgCloud").value),
     lanUrl: cleanUrl(document.getElementById("cfgLan").value),
-    apiKey: document.getElementById("cfgKey").value.trim()
+    apiKey: document.getElementById("cfgKey").value.trim(),
+    extPosUrl: cleanUrl(document.getElementById("cfgExtPosUrl").value),
+    extPosKey: document.getElementById("cfgExtPosKey").value.trim()
   };
   localStorage.setItem("mi_app_cfg", JSON.stringify(cfg));
   closeSettings();
@@ -2982,6 +3019,10 @@ async function sendPrecheck() {
 }
 async function payTableCheck(budas, extra={}) {
   try {
+    const tblSnap = ((waiterState && waiterState.tables) || []).find(t => t.id === activeTableId);
+    const chkSnap = tblSnap && (tblSnap.checks || []).find(c => c.id === activeCheckId);
+    const snapItems = ((chkSnap && chkSnap.items) || []).filter(it => (it.status || "draft") !== "voided");
+    const snapTotal = Number((chkSnap && chkSnap.totals && chkSnap.totals.total) ?? (tblSnap && tblSnap.unpaid_sum) ?? 0);
     const res = await svcCall("/api/stalai/apmoketi", "POST", Object.assign({
       pin: waiterPin, table_id: activeTableId, check_id: activeCheckId, mokejimo_budas: budas
     }, extra));
@@ -2991,22 +3032,46 @@ async function payTableCheck(budas, extra={}) {
       activeTableId = "";
       closeTableOrderModal();
     }
+    if (cfg.extPosUrl && snapItems.length) {
+      const {data, laikas, timestamp} = nowParts();
+      await forwardToExternalPos(Object.assign({
+        cekio_nr: activeCheckId || `${activeTableId}-${Date.now()}`,
+        data, laikas, timestamp,
+        stalas: (tblSnap && tblSnap.pavadinimas) || activeTableId,
+        padavejas: (waiterState && waiterState.staff_name) || "",
+        mokejimo_budas: budas,
+        suma: Math.round(snapTotal * 100) / 100,
+        elementai: snapItems.map(it => ({
+          pavadinimas: it.pavadinimas,
+          kiekis: Number(it.kiekis || 1),
+          kaina: Number(it.kaina || 0),
+          modifikacijos: buildItemMods(it),
+          nuolaida_proc: Number(it.nuolaida_proc || 0),
+          akcija: it.akcija || ""
+        }))
+      }, extra));
+    }
     await loadTablesState(false);
   } catch (e) { toast("⚠️ " + e.message, true); }
 }
 
-let payModalState = { mode: "Grynais", rawTotal: 0, cashDue: 0 };
+let payModalState = { mode: "Grynais", target: "table", rawTotal: 0, cashDue: 0 };
 function round5ct(val) {
   const n = Math.round(Number(val || 0) * 100);
   if (n <= 0) return 0;
   return (Math.round(n / 5) * 5) / 100;
 }
-function openPayModal(mode) {
-  if (!waiterState) return;
-  const tbl = (waiterState.tables || []).find(t => t.id === activeTableId);
-  const chk = tbl && (tbl.checks || []).find(c => c.id === activeCheckId);
-  const raw = chk && chk.totals ? Number(chk.totals.total || 0) : 0;
-  payModalState = { mode, rawTotal: raw, cashDue: raw };
+function openPayModal(mode, target="table") {
+  let raw = 0;
+  if (target === "pos") {
+    raw = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+  } else {
+    if (!waiterState) return;
+    const tbl = (waiterState.tables || []).find(t => t.id === activeTableId);
+    const chk = tbl && (tbl.checks || []).find(c => c.id === activeCheckId);
+    raw = chk && chk.totals ? Number(chk.totals.total || 0) : 0;
+  }
+  payModalState = { mode, target, rawTotal: raw, cashDue: raw };
   document.getElementById("payModalTitle").textContent = mode === "Mišrus" ? "🔀 Mišrus apmokėjimas" : "💵 Apmokėjimas grynaisiais";
   document.getElementById("pmRawTotal").textContent = raw.toFixed(2) + " €";
   document.getElementById("pmCardRow").style.display = mode === "Mišrus" ? "block" : "none";
@@ -3059,7 +3124,11 @@ async function confirmPayModal() {
     extra.grynais_suma = payModalState.cashDue;
   }
   closePayModal();
-  await payTableCheck(mode, extra);
+  if (payModalState.target === "pos") {
+    await confirmPosPay(mode.toLowerCase(), extra);
+  } else {
+    await payTableCheck(mode, extra);
+  }
 }
 
 function openShiftModal() {
