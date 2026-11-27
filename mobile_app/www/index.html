@@ -766,9 +766,8 @@
       <b id="orderModalTotal" style="font-size:17px;color:var(--amber);">0.00 €</b>
     </div>
     <input id="inpNote" class="inp" style="padding:8px 10px;font-size:13px;display:none;" placeholder="📝 Bendras komentaras virtuvei...">
-    <div id="posKitchenRow" style="display:none;grid-template-columns:1fr 1fr;gap:8px;">
-      <button class="btn btn-red" style="padding:9px 8px;font-size:12.5px;" onclick="cancelPosOrder()">Atšaukti</button>
-      <button id="btnSendPosKitchen" class="btn btn-amber" style="padding:9px 8px;font-size:12.5px;" onclick="sendPosToKitchen()">🍳 Siųsti į virtuvę</button>
+    <div id="posKitchenRow" style="display:none;grid-template-columns:1fr;gap:8px;">
+      <button id="btnSendPosKitchen" class="btn btn-amber" style="padding:10px 8px;font-size:13px;" onclick="sendPosToKitchen()">🍳 Siųsti į virtuvę</button>
     </div>
     <div id="posPayRow" style="display:flex;justify-content:space-between;gap:12px;">
       <button id="btnCancelPosDirect" class="btn btn-red" style="flex:0 0 42%;" onclick="cancelPosOrder()">Atšaukti</button>
@@ -1356,8 +1355,8 @@ function renderCart() {
   const totRow = document.getElementById("orderModalTotalRow");
   if (noteEl) noteEl.style.display = needKitchenSend ? "block" : "none";
   if (kRow) kRow.style.display = needKitchenSend ? "grid" : "none";
-  if (totRow) totRow.style.display = needKitchenSend ? "flex" : "none";
-  if (pRow) pRow.style.display = needKitchenSend ? "none" : "flex";
+  if (totRow) totRow.style.display = "flex";
+  if (pRow) pRow.style.display = "flex";
   if (cancelDirect) cancelDirect.style.display = "flex";
   if (pRow) pRow.style.justifyContent = "space-between";
   const posClr = document.getElementById("posBarClearBtn");
