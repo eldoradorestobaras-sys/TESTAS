@@ -723,6 +723,21 @@
   </div>
 </div>
 
+<!-- ČEKIO GRĄŽINIMO / NURAŠYMO PATVIRTINIMO MODALAS -->
+<div id="recConfirmModal" class="modal-bg" style="z-index:85;" onclick="if(event.target===this)closeRecConfirm()">
+  <div class="modal" style="max-width:340px;">
+    <div class="row-between">
+      <h3 id="recConfirmTitle">Patvirtinti veiksmą?</h3>
+      <button class="x-close" onclick="closeRecConfirm()">&times;</button>
+    </div>
+    <div id="recConfirmMsg" style="font-size:13px;color:var(--muted);"></div>
+    <div style="display:flex;gap:8px;margin-top:4px;">
+      <button class="btn" style="flex:1;" onclick="closeRecConfirm()">Atšaukti</button>
+      <button id="recConfirmOkBtn" class="btn btn-amber" style="flex:1;" onclick="execRecConfirm()">✓ Patvirtinti</button>
+    </div>
+  </div>
+</div>
+
 <!-- ANULIAVIMO (VOID) MODALAS -->
 <div id="voidModal" class="modal-bg" style="z-index:75;" onclick="if(event.target===this)closeVoidModal()">
   <div class="modal" style="max-width:360px;">
@@ -2025,6 +2040,32 @@ async function writeOffCart() {
   }
 }
 
+let _pendingRecAction = null;
+function askCancelOrRefund(i, op) {
+  const r = receipts[i];
+  if (!r || r.status !== "Aktyvus") return;
+  _pendingRecAction = { i, op };
+  const isWaste = op === "atsaukti";
+  document.getElementById("recConfirmTitle").textContent = isWaste ? `Nurašyti čekį #${r.cekis}?` : `Grąžinti čekį #${r.cekis}?`;
+  document.getElementById("recConfirmMsg").textContent = isWaste
+    ? `Patiekalai (${Number(r.total || 0).toFixed(2)} €) bus nurašyti į nuostolius ir nebegrįš į sandėlį.`
+    : `Čekis (${Number(r.total || 0).toFixed(2)} €) bus grąžintas, o produktai atstatyti į sandėlį.`;
+  const okBtn = document.getElementById("recConfirmOkBtn");
+  okBtn.className = isWaste ? "btn btn-red" : "btn btn-amber";
+  okBtn.textContent = isWaste ? "✓ Taip, nurašyti" : "✓ Taip, grąžinti";
+  document.getElementById("recConfirmModal").classList.add("open");
+}
+function closeRecConfirm() {
+  _pendingRecAction = null;
+  document.getElementById("recConfirmModal").classList.remove("open");
+}
+async function execRecConfirm() {
+  const act = _pendingRecAction;
+  closeRecConfirm();
+  if (!act) return;
+  await cancelOrRefund(act.i, act.op);
+}
+
 async function cancelOrRefund(i, op) {
   const r = receipts[i];
   const {data, laikas, timestamp} = nowParts();
@@ -2094,15 +2135,15 @@ function renderReceipts() {
     const isUnpaid = isAct && r.paid === false;
     const isPaid = isAct && r.paid !== false;
     const cardStyle = isUnpaid
-      ? "cursor:pointer;gap:10px;border:1px solid rgba(236,72,153,0.55);box-shadow:0 0 16px rgba(236,72,153,0.28), 0 4px 16px rgba(0,0,0,0.45);background:rgba(236,72,153,0.08);"
+      ? "cursor:pointer;gap:10px;border:1px solid rgba(255,179,0,0.32);box-shadow:0 0 14px rgba(255,179,0,0.16), 0 4px 16px rgba(0,0,0,0.45);"
       : (isPaid
-        ? "cursor:pointer;gap:10px;border:1px solid rgba(102,187,106,0.55);box-shadow:0 0 16px rgba(102,187,106,0.25), 0 4px 16px rgba(0,0,0,0.45);background:rgba(102,187,106,0.07);"
+        ? "cursor:pointer;gap:10px;border:1px solid rgba(102,187,106,0.28);box-shadow:0 0 14px rgba(102,187,106,0.14), 0 4px 16px rgba(0,0,0,0.45);"
         : "cursor:pointer;gap:10px;");
     return `
     <div class="glass-card" style="${cardStyle}" onclick="openReceiptModal(${i})">
-      <div class="row-between">
-        <b>#${r.cekis} • ${r.data}</b>
-        <b style="color:${isAct?(isUnpaid?'#F472B6':'var(--green)'):(r.status==='Nurašyta'?'var(--red)':'var(--amber)')}">${isUnpaid ? 'Neapmokėtas' : r.status} • ${Number(r.total||0).toFixed(2)} €</b>
+      <div class="row-between" style="gap:8px;">
+        <b style="font-size:13px;">#${r.cekis} • ${r.data}</b>
+        <b style="white-space:nowrap;flex-shrink:0;font-size:13px;color:${isAct?(isUnpaid?'#FFB300':'#66BB6A'):(r.status==='Nurašyta'?'#FF5252':'#FFB300')}">${isUnpaid ? 'Neapmokėtas' : r.status} • ${Number(r.total||0).toFixed(2)} €</b>
       </div>
       <div style="font-size:12px;color:var(--muted);">${(r.items||[]).map(x => {
         const tm = isAct ? _calcLocalTimer(x.pavadinimas, r.data) : null;
@@ -2110,8 +2151,8 @@ function renderReceipts() {
       }).join(', ')}</div>
       <div style="display:flex;gap:8px;width:100%;">
         ${isUnpaid ? `<button class="btn btn-green" style="flex:1;padding:8px 6px;font-size:12px;" onclick="event.stopPropagation();openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
-        <button class="btn btn-red" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'atsaukti')">Nurašyti</button>
-        <button class="btn btn-amber" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+        <button class="btn btn-amber" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();askCancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+        <button class="btn btn-red" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();askCancelOrRefund(${i},'atsaukti')">Nurašyti</button>
       </div>
     </div>
   `;
@@ -2144,8 +2185,8 @@ function openReceiptModal(i) {
   const needPay = r.status === "Aktyvus" && r.paid === false;
   document.getElementById("recModalActions").innerHTML = `
     ${needPay ? `<button class="btn btn-green" style="flex:1;" onclick="openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
-    <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'atsaukti')">Nurašyti</button>
-    <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+    <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();askCancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
+    <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();askCancelOrRefund(${i},'atsaukti')">Nurašyti</button>
   `;
   document.getElementById("receiptModal").classList.add("open");
   clearInterval(window._recTimerTick);
