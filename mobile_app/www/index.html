@@ -766,8 +766,9 @@
       <b id="orderModalTotal" style="font-size:17px;color:var(--amber);">0.00 €</b>
     </div>
     <input id="inpNote" class="inp" style="padding:8px 10px;font-size:13px;display:none;" placeholder="📝 Bendras komentaras virtuvei...">
-    <div id="posKitchenRow" style="display:none;grid-template-columns:1fr;gap:8px;">
-      <button id="btnSendPosKitchen" class="btn btn-amber" style="padding:10px 8px;font-size:13px;" onclick="sendPosToKitchen()">🍳 Siųsti į virtuvę</button>
+    <div id="posKitchenRow" style="display:none;grid-template-columns:1fr 1fr;gap:8px;">
+      <button class="btn btn-red" style="padding:9px 8px;font-size:12.5px;" onclick="cancelPosOrder()">Atšaukti</button>
+      <button id="btnSendPosKitchen" class="btn btn-amber" style="padding:9px 8px;font-size:12.5px;" onclick="sendPosToKitchen()">🍳 Siųsti į virtuvę</button>
     </div>
     <div id="posPayRow" style="display:flex;justify-content:space-between;gap:12px;">
       <button id="btnCancelPosDirect" class="btn btn-red" style="flex:0 0 42%;" onclick="cancelPosOrder()">Atšaukti</button>
@@ -910,13 +911,6 @@
       </div>
     </div>
     <div class="mod-sec-title">Klientas davė grynais (€)</div>
-    <div class="chip-wrap">
-      <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="setCashGiven('exact')">Tiksliai</button>
-      <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="setCashGiven(5)">5 €</button>
-      <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="setCashGiven(10)">10 €</button>
-      <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="setCashGiven(20)">20 €</button>
-      <button class="btn" style="padding:5px 9px;font-size:11.5px;" onclick="setCashGiven(50)">50 €</button>
-    </div>
     <input id="pmCashGiven" type="number" step="0.01" min="0" class="inp" style="padding:7px 10px;font-size:13.5px;" placeholder="0.00" oninput="recalcPayModal()">
     <div class="mod-sec">
       <div class="row-between">
@@ -1355,8 +1349,8 @@ function renderCart() {
   const totRow = document.getElementById("orderModalTotalRow");
   if (noteEl) noteEl.style.display = needKitchenSend ? "block" : "none";
   if (kRow) kRow.style.display = needKitchenSend ? "grid" : "none";
-  if (totRow) totRow.style.display = "flex";
-  if (pRow) pRow.style.display = "flex";
+  if (totRow) totRow.style.display = needKitchenSend ? "flex" : "none";
+  if (pRow) pRow.style.display = needKitchenSend ? "none" : "flex";
   if (cancelDirect) cancelDirect.style.display = "flex";
   if (pRow) pRow.style.justifyContent = "space-between";
   const posClr = document.getElementById("posBarClearBtn");
@@ -1470,7 +1464,7 @@ async function sendPosToKitchen() {
   };
   const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
   const res = await postWithFailover("/api/uzsakymas", payload);
-  receipts.unshift({cekis, data: timestamp, total, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
+  receipts.unshift({cekis, data: timestamp, total, paid: false, pay: "", pastaba: note, nuolaida_proc: orderDisc, akcija: orderPromo, items: JSON.parse(JSON.stringify(cart)), status: "Aktyvus", via: res.ok ? res.channel : "queue"});
   receipts = receipts.slice(0, 40);
   localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
   renderReceipts();
@@ -1483,6 +1477,7 @@ async function sendPosToKitchen() {
   renderCart();
   loadKDS();
   toast(res.ok ? (res.channel === "cloud" ? `☁️ #${cekis} išsiųsta į virtuvę per Cloud!` : `🏠 #${cekis} išsiųsta į virtuvę per LAN!`) : `📴 Nėra ryšio — #${cekis} įdėta į eilę!`, !res.ok);
+  openPosPayModalForReceipt(0);
 }
 
 async function onPosTableChange() {
@@ -1602,17 +1597,63 @@ async function cancelPosOrder() {
   closePosOrderModal();
   renderCart();
 }
+let activePayReceiptIdx = -1;
 function openPosPayModal() {
   if (!cart.length) return;
+  activePayReceiptIdx = -1;
   const total = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
   document.getElementById("posPayTotal").textContent = total.toFixed(2) + " €";
+  document.getElementById("posPayModal").classList.add("open");
+}
+function openPosPayModalForReceipt(recIdx) {
+  const r = receipts[recIdx];
+  if (!r || r.status !== "Aktyvus" || r.paid !== false) return;
+  activePayReceiptIdx = recIdx;
+  document.getElementById("posPayTotal").textContent = Number(r.total || 0).toFixed(2) + " €";
   document.getElementById("posPayModal").classList.add("open");
 }
 function closePosPayModal() {
   document.getElementById("posPayModal").classList.remove("open");
 }
+async function completeReceiptPayment(recIdx, method, extra={}) {
+  const r = receipts[recIdx];
+  if (!r) return;
+  r.paid = true;
+  r.pay = method;
+  localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+  renderReceipts();
+  if (document.getElementById("receiptModal")?.classList.contains("open")) {
+    openReceiptModal(recIdx);
+  }
+  toast(`✅ Čekis #${r.cekis} apmokėtas (${method})!`);
+  const {data, laikas, timestamp} = nowParts();
+  await forwardToExternalPos(Object.assign({
+    cekio_nr: r.cekis,
+    data, laikas, timestamp,
+    mokejimo_budas: method,
+    pastaba: r.pastaba || "",
+    nuolaida_proc: Number(r.nuolaida_proc || 0),
+    akcija: r.akcija || "",
+    suma: Math.round(Number(r.total || 0) * 100) / 100,
+    elementai: (r.items || []).map(c => ({
+      kodas: c.plu || "",
+      pavadinimas: c.pavadinimas,
+      kiekis: (c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l")) ? (c.kiekis / 1000.0) : Number(c.kiekis || 1),
+      kaina: (c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l")) ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+      modifikacijos: buildItemMods(c),
+      nuolaida_proc: Number(c.nuolaida_proc || 0),
+      akcija: c.akcija || ""
+    }))
+  }, extra));
+}
 async function confirmPosPay(method, extra={}) {
   closePosPayModal();
+  if (activePayReceiptIdx >= 0) {
+    const idx = activePayReceiptIdx;
+    activePayReceiptIdx = -1;
+    await completeReceiptPayment(idx, method, extra);
+    return;
+  }
   closePosOrderModal();
   await sendOrder(method, extra);
 }
@@ -2059,8 +2100,9 @@ function renderReceipts() {
         return `${x.kiekis}× ${x.pavadinimas}${tm ? ` <span style="color:${tm.sec===0?'var(--green)':'var(--amber)'};font-weight:700;">(${tm.label})</span>` : ""}`;
       }).join(', ')}</div>
       <div class="row-between">
-        <span style="font-size:11px;color:var(--amber);">${r.via==='cloud'?'☁️ Cloud':r.via==='lan'?'🏠 LAN':'📴 Eilė'}</span>
+        <span style="font-size:11px;color:var(--amber);">${r.via==='cloud'?'☁️ Cloud':r.via==='lan'?'🏠 LAN':'📴 Eilė'}${r.status==='Aktyvus'?(r.paid===false?' • <span style="color:#FCA5A5;">Neapmokėtas</span>':(r.pay?` • ✅ ${r.pay}`:'')):''}</span>
         <div style="display:flex;gap:6px;">
+          ${(r.status==='Aktyvus' && r.paid===false) ? `<button class="btn btn-green" style="flex:0 0 auto;padding:7px 11px;font-size:12px;" onclick="event.stopPropagation();openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
           <button class="btn btn-red" style="flex:0 0 auto;padding:7px 11px;font-size:12px;${r.status!=='Aktyvus'?'opacity:0.4;pointer-events:none;':''}" ${r.status!=='Aktyvus'?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'atsaukti')">🗑️ Nurašyti</button>
           <button class="btn btn-amber" style="flex:0 0 auto;padding:7px 11px;font-size:12px;${r.status!=='Aktyvus'?'opacity:0.4;pointer-events:none;':''}" ${r.status!=='Aktyvus'?'disabled':''} onclick="event.stopPropagation();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
         </div>
@@ -2092,7 +2134,9 @@ function openReceiptModal(i) {
   _renderReceiptModalItems(r);
   document.getElementById("recModalTotal").textContent = `${Number(r.total || 0).toFixed(2)} €`;
   const dis = r.status !== "Aktyvus";
+  const needPay = r.status === "Aktyvus" && r.paid === false;
   document.getElementById("recModalActions").innerHTML = `
+    ${needPay ? `<button class="btn btn-green" style="flex:1;" onclick="openPosPayModalForReceipt(${i})">💳 Apmokėti</button>` : ''}
     <button class="btn btn-red" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'atsaukti')">🗑️ Nurašyti</button>
     <button class="btn btn-amber" style="flex:1;${dis?'opacity:0.4;pointer-events:none;':''}" ${dis?'disabled':''} onclick="closeReceiptModal();cancelOrRefund(${i},'grazinti')">↩️ Grąžinti</button>
   `;
@@ -3063,7 +3107,11 @@ function round5ct(val) {
 function openPayModal(mode, target="table") {
   let raw = 0;
   if (target === "pos") {
-    raw = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+    if (activePayReceiptIdx >= 0 && receipts[activePayReceiptIdx]) {
+      raw = Number(receipts[activePayReceiptIdx].total || 0);
+    } else {
+      raw = cart.reduce((s, c) => s + c.kiekis * calcItemUnit(c), 0);
+    }
   } else {
     if (!waiterState) return;
     const tbl = (waiterState.tables || []).find(t => t.id === activeTableId);
