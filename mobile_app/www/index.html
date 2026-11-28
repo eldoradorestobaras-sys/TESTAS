@@ -65,7 +65,7 @@
   .mi-sel-menu {
     position: absolute; left: 0; right: 0; top: calc(100% + 4px); z-index: 90;
     background: #141822; border-radius: 10px; padding: 4px; display: none; flex-direction: column; gap: 2px;
-    max-height: 160px; overflow-y: auto;
+    max-height: 320px; overflow-y: auto;
     box-shadow: 0 10px 28px rgba(0, 0, 0, 0.85), inset 0 0 1px rgba(255, 255, 255, 0.12);
   }
   .mi-sel.open .mi-sel-menu { display: flex; }
@@ -391,7 +391,7 @@
 </head>
 <body>
 <div class="app">
-  <div class="topbar">
+  <div class="topbar" style="display:none;">
     <div class="brand">
       <img src="icon.png" class="brand-icon" alt="MI" onerror="this.style.display='none'">
       <div>Model MI <span style="color:var(--amber);font-weight:700;font-size:13px;">Kasa</span></div>
@@ -403,13 +403,14 @@
     </div>
   </div>
 
-  <div class="tabs">
+  <div class="tabs" style="display:none;">
     <button class="tab-btn active" onclick="switchTab('tables', this)">Stalai</button>
     <button class="tab-btn" onclick="switchTab('pos', this)">💳 Kasa</button>
     <button class="tab-btn" onclick="switchTab('receipts', this)">🧾 Čekiai<span id="recCnt"></span></button>
     <button class="tab-btn" onclick="switchTab('kds', this)">🍳 Gamyba<span id="kdsCnt"></span></button>
   </div>
-  <div id="lockCornerRow" style="display:none;justify-content:flex-end;padding:4px 12px 0;flex-shrink:0;">
+  <div id="lockCornerRow" style="display:none;justify-content:space-between;align-items:center;padding:4px 12px 0;flex-shrink:0;">
+    <div><button id="btnMgrAdminPos" class="btn" style="padding:5px 10px;font-size:12px;display:none;" onclick="openMgrModal()">👥 Personalas / Stalai</button></div>
     <button class="btn" style="padding:5px 10px;font-size:13px;" title="Užrakinti" onclick="lockWaiter()">🔒</button>
   </div>
 
@@ -532,7 +533,7 @@
 </div>
 
 <!-- MODIFIKATORIŲ IR NUOLAIDOS MODALAS -->
-<div id="modModal" class="modal-bg" style="z-index:70;" onclick="if(event.target===this)closeModModal()">
+<div id="modModal" class="modal-bg" style="z-index:82;" onclick="if(event.target===this)closeModModal()">
   <div class="modal">
     <div class="row-between">
       <h3 id="modTitle">⚙️ Modifikatoriai</h3>
@@ -1113,10 +1114,20 @@ async function flushQueue() {
 }
 
 function switchTab(name, btn) {
+  if (name !== "tables" && (!waiterPin || !waiterState)) {
+    toast("🔐 Pirma prisijunkite PIN kodu!", true);
+    name = "tables";
+    btn = document.querySelector(".tab-btn");
+  }
   document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
-  btn.classList.add("active");
+  if (btn) btn.classList.add("active");
   document.getElementById("view-" + name).classList.add("active");
+  const _mgrPos = document.getElementById("btnMgrAdminPos");
+  if (_mgrPos) {
+    const isMgr = !!(waiterState && waiterState.user && waiterState.user.role === "vadybininkas");
+    _mgrPos.style.display = (isMgr && name === "pos") ? "inline-flex" : "none";
+  }
   if (name === "kds") loadKDS();
 }
 
@@ -1155,7 +1166,7 @@ function renderMenu() {
       const rawName = String(p.pavadinimas || "");
       const dispName = rawName.replace(/_{1,2}(l|vnt|kg|g|ml)$/i, "").trim();
       const vnt = /_{1,2}l$/i.test(rawName) ? "l" : (/_{1,2}vnt$/i.test(rawName) ? "vnt" : String(p.mat_vnt || "vnt").trim());
-      const inCart = cart.find(c => c.is_sandelis && c.pavadinimas === dispName);
+      const inCart = cart.find(c => c.is_sandelis && c.pavadinimas === dispName && String(c.orig_vnt || "").toLowerCase() === vnt.toLowerCase());
       const qTxt = inCart ? `${inCart.kiekis}${inCart.disp_vnt || ''}` : "";
       return `
         <div class="dish-card" onclick="addProductToCart(sandelisItems[${idx}])">
@@ -1240,10 +1251,11 @@ function addProductToCart(p) {
   const dispVnt = origVnt === "kg" ? "g" : (origVnt === "l" ? "ml" : origVnt);
   const defQty = (dispVnt === "g" || dispVnt === "ml") ? 100 : 1;
   const unitPrice = isScaled ? (Number(p.kaina || 0) / 1000.0) : Number(p.kaina || 0);
-  const ex = cart.find(c => c.is_sandelis && c.pavadinimas === dispName);
+  const ex = cart.find(c => c.is_sandelis && c.pavadinimas === dispName && String(c.orig_vnt || "").toLowerCase() === origVnt);
   if (ex) ex.kiekis += defQty;
   else cart.push({
     plu: "",
+    raw_pav: rawName,
     pavadinimas: dispName,
     zona: "sandelis",
     is_sandelis: true,
@@ -1294,6 +1306,35 @@ function chQty(idx, d) {
   renderCart();
 }
 
+function _modBadgeHtml(has) {
+  return has ? `<span style="color:var(--amber);margin-left:5px;font-size:11.5px;flex-shrink:0;" title="Modifikuota">✏️</span>` : "";
+}
+
+function showItemModsModal(item) {
+  if (!item) return;
+  const txt = formatItemModsText(item);
+  const parts = [];
+  if (item.neideti?.length) parts.push(`<div><b style="color:var(--amber);">Be:</b> ${item.neideti.join(", ")}</div>`);
+  if (item.pakeisti?.length) parts.push(`<div><b style="color:var(--amber);">Pakeista:</b> ${item.pakeisti.map(x => `${x.orig || x.ka || ""} → ${x.naujas || x.ikuo || ""}${Number(x.kaina||0)>0?` (+${Number(x.kaina).toFixed(2)}€)`:""}`).join(", ")}</div>`);
+  if (item.priedai?.length) parts.push(`<div><b style="color:var(--amber);">Priedai:</b> ${item.priedai.map(x => `+${x.pavadinimas}${Number(x.kaina||0)>0?` (+${Number(x.kaina).toFixed(2)}€)`:""}`).join(", ")}</div>`);
+  if (Number(item.nuolaida_proc || 0) > 0) parts.push(`<div><b style="color:var(--amber);">Nuolaida:</b> -${Number(item.nuolaida_proc)}%</div>`);
+  document.getElementById("recConfirmTitle").textContent = `⚙️ ${item.pavadinimas || "Patiekalas"}`;
+  document.getElementById("recConfirmMsg").innerHTML = parts.length ? parts.join("<div style='height:6px;'></div>") : (txt || "Modifikacijų nėra.");
+  const okBtn = document.getElementById("recConfirmOkBtn");
+  okBtn.style.display = "none";
+  document.getElementById("recConfirmModal").classList.add("open");
+}
+
+function formatItemModsText(c) {
+  if (!c) return "";
+  const parts = [];
+  if (c.neideti?.length) parts.push("BE: " + c.neideti.join(", "));
+  if (c.pakeisti?.length) parts.push("KEISTA: " + c.pakeisti.map(x => `${x.orig || x.ka || ""}→${x.naujas || x.ikuo || ""}`).join(", "));
+  if (c.priedai?.length) parts.push("PRIEDAI: " + c.priedai.map(x => `+${x.pavadinimas}`).join(", "));
+  if (Number(c.nuolaida_proc || 0) > 0) parts.push(`-${Number(c.nuolaida_proc)}%`);
+  return parts.join(" • ");
+}
+
 function calcItemUnit(c) {
   const extraRep = (c.pakeisti || []).reduce((s, x) => s + Number(x.kaina || 0), 0);
   const extraAdd = (c.priedai || []).reduce((s, x) => s + Number(x.kaina || 0), 0);
@@ -1328,9 +1369,8 @@ function renderCart() {
       <div class="cart-row" style="padding:8px 10px;gap:0;">
         <div class="row-between" style="gap:8px;">
           <div style="flex:1;min-width:0;cursor:pointer;" onclick="openModModal(${i})" title="Spauskite modifikuoti arba pritaikyti nuolaidą">
-            <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              ${c.is_sandelis ? "" : `<span style="color:${zm.spalva};font-weight:900;margin-right:4px;">${zm.kodas}</span>`}${String(c.pavadinimas || "").replace(/_{1,2}(l|vnt|kg|g|ml)$/i, "").trim()}
-              ${hasMods ? `<span style="color:var(--amber);font-size:11px;margin-left:4px;">●</span>` : ""}
+            <div style="font-weight:700;font-size:13px;display:flex;align-items:center;min-width:0;">
+              ${c.is_sandelis ? "" : `<span style="color:${zm.spalva};font-weight:900;margin-right:4px;flex-shrink:0;">${zm.kodas}</span>`}<span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${String(c.pavadinimas || "").replace(/_{1,2}(l|vnt|kg|g|ml)$/i, "").trim()}</span>${_modBadgeHtml(hasMods)}
             </div>
           </div>
           <div class="qty-ctrl" style="flex-shrink:0;">
@@ -1355,6 +1395,17 @@ function renderCart() {
   if (mTot) mTot.textContent = sumStr;
   const payBtn = document.getElementById("btnOpenPosPay");
   if (payBtn) payBtn.textContent = `Apmokėti • ${sumStr}`;
+  const ordDiscEl = document.getElementById("inpOrderDisc");
+  if (ordDiscEl) {
+    const itemDiscs = [...new Set(cart.map(c => Number(c.nuolaida_proc || 0)).filter(x => x > 0))];
+    if (!ordDiscEl.value) {
+      ordDiscEl.placeholder = itemDiscs.length === 1 ? `-${itemDiscs[0]}%` : (itemDiscs.length > 1 ? "Akc." : "Nuol. %");
+    }
+    const hasAnyDisc = Number(ordDiscEl.value || 0) > 0 || itemDiscs.length > 0;
+    ordDiscEl.style.boxShadow = hasAnyDisc ? "0 0 12px rgba(255,179,0,0.45)" : "";
+    ordDiscEl.style.borderColor = hasAnyDisc ? "rgba(255,179,0,0.6)" : "";
+    ordDiscEl.style.color = hasAnyDisc ? "var(--amber)" : "";
+  }
   const hasKitchenDish = cart.some(c => !["baras", "sandelis", "kita"].includes(String(c.zona || "").toLowerCase()));
   const needKitchenSend = hasKitchenDish && !posOrderSentToKitchen;
   const noteEl = document.getElementById("inpNote");
@@ -1558,6 +1609,13 @@ function openPosOrderModal() {
     sel.innerHTML = `<option value="">Be stalo</option>` +
       tbls.map(t => `<option value="${t.id}">${t.pavadinimas}</option>`).join("");
     if (tbls.some(t => t.id === curVal)) sel.value = curVal;
+    syncMiSelect("posTargetTable");
+    const miWrap = sel.nextElementSibling;
+    if (miWrap && miWrap.classList.contains("mi-sel")) {
+      miWrap.style.display = tbls.length ? "block" : "none";
+      miWrap.style.width = "auto";
+      miWrap.style.minWidth = "110px";
+    }
   }
   renderCart();
   document.getElementById("posOrderModal").classList.add("open");
@@ -1724,7 +1782,7 @@ async function openModModal(idx, focusPromo=false) {
 }
 function closeModModal() { document.getElementById("modModal").classList.remove("open"); }
 function renderModChips() {
-  const ingSrc = modTableItemId ? (modDraft._ings || []) : ((cart[modIdx] && cart[modIdx].ingredientai) || []);
+  const ingSrc = (modTableItemId || modReceiptTarget) ? (modDraft._ings || []) : ((cart[modIdx] && cart[modIdx].ingredientai) || []);
   const allNames = [...new Set([...ingSrc, ...modDraft.neideti])];
   document.getElementById("modIngChips").innerHTML = allNames.length
     ? allNames.map(n => {
@@ -1737,13 +1795,14 @@ function toggleNoIng(n) {
   const i = modDraft.neideti.indexOf(n);
   if (i >= 0) modDraft.neideti.splice(i, 1); else modDraft.neideti.push(n);
   renderModChips();
+  renderReplaceSelects();
 }
 function addCustomNo() {
   const el = document.getElementById("inpCustomNo");
   const v = el.value.trim();
   if (!v) return;
   if (!modDraft.neideti.includes(v)) modDraft.neideti.push(v);
-  el.value = ""; renderModChips();
+  el.value = ""; renderModChips(); renderReplaceSelects();
 }
 function cleanProdName(n) {
   return String(n || "").replace(/_{1,2}(l|vnt|kg)$/i, "").trim();
@@ -1763,11 +1822,13 @@ function toBaseQty(qty, vnt) {
   return (u === "g" || u === "gr" || u === "ml") ? (Number(qty) / 1000.0) : Number(qty);
 }
 function renderReplaceSelects() {
-  const ingSrc = modTableItemId ? (modDraft._ings || []) : ((cart[modIdx] && cart[modIdx].ingredientai) || []);
-  const infoSrc = modTableItemId ? (modDraft._ingsInfo || []) : ((cart[modIdx] && cart[modIdx].ingredientai_info) || []);
-  const infos = (infoSrc && infoSrc.length)
+  const ingSrc = (modTableItemId || modReceiptTarget) ? (modDraft._ings || []) : ((cart[modIdx] && cart[modIdx].ingredientai) || []);
+  const infoSrc = (modTableItemId || modReceiptTarget) ? (modDraft._ingsInfo || []) : ((cart[modIdx] && cart[modIdx].ingredientai_info) || []);
+  const noSet = new Set((modDraft.neideti || []).map(x => String(x || "").trim().toLowerCase()));
+  const infos = ((infoSrc && infoSrc.length)
     ? infoSrc
-    : ingSrc.map(x => ({pav: x, kiekis: 100, vnt: "g"}));
+    : ingSrc.map(x => ({pav: x, kiekis: 100, vnt: "g"})))
+    .filter(x => !noSet.has(String(x.pav || "").trim().toLowerCase()));
   document.getElementById("selRepOrig").innerHTML = infos.length
     ? infos.map(x => `<option value="${x.pav}" data-qty="${x.kiekis}" data-unit="${x.vnt}">${x.pav}</option>`).join("")
     : `<option value="">-- Nėra receptūros --</option>`;
@@ -1859,10 +1920,12 @@ function renderModLists() {
 }
 function setItemDisc(p) {
   document.getElementById("inpItemDisc").value = p;
-  if (p > 0 && !document.getElementById("inpItemPromo").value.trim()) {
-    document.getElementById("inpItemPromo").value = `Akcija -${p}%`;
+  const promoEl = document.getElementById("inpItemPromo");
+  const curPromo = promoEl.value.trim();
+  if (p > 0 && (!curPromo || /^Akcija -\d+%$/i.test(curPromo))) {
+    promoEl.value = `Akcija -${p}%`;
   } else if (p <= 0) {
-    document.getElementById("inpItemPromo").value = "";
+    promoEl.value = "";
   }
 }
 let modTableItemId = "";
@@ -1875,8 +1938,11 @@ async function openTableModModal(itemId, focusPromo=false) {
   modIdx = -1;
   const menuObj = menu.find(m => String(m.pavadinimas||"").toLowerCase() === String(it.pavadinimas||"").toLowerCase()) || {};
   modDraft = {
-    neideti: [], pakeisti: [], priedai: [],
-    nuolaida_proc: 0, akcija: "",
+    neideti: [...(it.neideti || [])],
+    pakeisti: JSON.parse(JSON.stringify(it.pakeisti || [])),
+    priedai: JSON.parse(JSON.stringify(it.priedai || [])),
+    nuolaida_proc: Number(it.nuolaida_proc || 0),
+    akcija: it.akcija || "",
     _baseName: it.pavadinimas,
     _basePrice: Number(menuObj.kaina || it.kaina || 0),
     _qty: Number(it.kiekis || 1),
@@ -1884,8 +1950,8 @@ async function openTableModModal(itemId, focusPromo=false) {
     _ingsInfo: Array.isArray(menuObj.ingredientai_info) ? menuObj.ingredientai_info : []
   };
   document.getElementById("modTitle").textContent = `⚙️ ${it.pavadinimas}`;
-  document.getElementById("inpItemDisc").value = "";
-  document.getElementById("inpItemPromo").value = "";
+  document.getElementById("inpItemDisc").value = modDraft.nuolaida_proc || "";
+  document.getElementById("inpItemPromo").value = modDraft.akcija || "";
   renderModChips();
   renderReplaceSelects();
   renderSandelisSelect();
@@ -1894,7 +1960,67 @@ async function openTableModModal(itemId, focusPromo=false) {
   if (focusPromo) setTimeout(() => document.getElementById("inpItemDisc").focus(), 100);
 }
 
+let modReceiptTarget = null;
+async function openModModalForReceipt(recIdx, itemIdx) {
+  const r = receipts[recIdx];
+  const it = r && r.items && r.items[itemIdx];
+  if (!it) return;
+  modTableItemId = "";
+  modIdx = -1;
+  modReceiptTarget = { recIdx, itemIdx };
+  if (!sandelisItems.length || !it.ingredientai?.length || !it.ingredientai_info?.length) {
+    await syncRemoteData(false);
+  }
+  const menuObj = menu.find(m => String(m.pavadinimas||"").toLowerCase() === String(it.pavadinimas||"").toLowerCase()) || {};
+  const ings = (Array.isArray(it.ingredientai) && it.ingredientai.length) ? it.ingredientai : (Array.isArray(menuObj.ingredientai) ? menuObj.ingredientai : []);
+  const ingsInfo = (Array.isArray(it.ingredientai_info) && it.ingredientai_info.length) ? it.ingredientai_info : (Array.isArray(menuObj.ingredientai_info) ? menuObj.ingredientai_info : []);
+  modDraft = {
+    neideti: [...(it.neideti || [])],
+    pakeisti: JSON.parse(JSON.stringify(it.pakeisti || [])),
+    priedai: JSON.parse(JSON.stringify(it.priedai || [])),
+    nuolaida_proc: Number(it.nuolaida_proc || 0),
+    akcija: it.akcija || "",
+    _ings: ings,
+    _ingsInfo: ingsInfo
+  };
+  document.getElementById("modTitle").textContent = `⚙️ ${it.pavadinimas}`;
+  document.getElementById("modSub").textContent = `Receptūroje: ${ings.length} ingr. • Sandėlyje: ${sandelisItems.length} prek.`;
+  document.getElementById("inpItemDisc").value = modDraft.nuolaida_proc || "";
+  document.getElementById("inpItemPromo").value = modDraft.akcija || "";
+  document.getElementById("inpAddonCustom").value = "";
+  renderModChips(); renderReplaceSelects(); renderSandelisSelect(); renderModLists();
+  document.getElementById("modModal").classList.add("open");
+}
+
 async function saveModModal() {
+  if (modReceiptTarget) {
+    const { recIdx, itemIdx } = modReceiptTarget;
+    modReceiptTarget = null;
+    const r = receipts[recIdx];
+    const it = r && r.items && r.items[itemIdx];
+    if (it) {
+      it.neideti = modDraft.neideti;
+      it.pakeisti = modDraft.pakeisti;
+      it.priedai = modDraft.priedai;
+      const newProc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
+      it.nuolaida_proc = newProc;
+      it.akcija = newProc > 0 ? (document.getElementById("inpItemPromo").value.trim() || `Akcija -${newProc}%`) : "";
+      r.total = (r.items || []).reduce((s, x) => s + Number(x.kiekis || 1) * calcItemUnit(x), 0);
+      r._dirty = true;
+      localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+      renderReceipts();
+      if (r.items.length === 1 && recEditModeIdx !== recIdx) {
+        closeModModal();
+        await saveEditedReceipt(recIdx);
+        return;
+      }
+      if (document.getElementById("receiptModal")?.classList.contains("open")) {
+        openReceiptModal(recIdx);
+      }
+    }
+    closeModModal();
+    return;
+  }
   if (modTableItemId) {
     const disc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
     const akcTxt = document.getElementById("inpItemPromo").value.trim();
@@ -2053,6 +2179,7 @@ function askCancelOrRefund(i, op) {
     ? `Patiekalai (${Number(r.total || 0).toFixed(2)} €) bus nurašyti į nuostolius ir nebegrįš į sandėlį.`
     : `Čekis (${Number(r.total || 0).toFixed(2)} €) bus grąžintas, o produktai atstatyti į sandėlį.`;
   const okBtn = document.getElementById("recConfirmOkBtn");
+  okBtn.style.display = "";
   okBtn.className = isWaste ? "btn btn-red" : "btn btn-amber";
   okBtn.textContent = isWaste ? "✓ Taip, nurašyti" : "✓ Taip, grąžinti";
   document.getElementById("recConfirmModal").classList.add("open");
@@ -2149,7 +2276,8 @@ function renderReceipts() {
       </div>
       <div style="font-size:12px;color:var(--muted);">${(r.items||[]).map(x => {
         const tm = isAct ? _calcLocalTimer(x.pavadinimas, r.data) : null;
-        return `${x.kiekis}× ${x.pavadinimas}${tm ? ` <span style="color:${tm.sec===0?'var(--green)':'var(--amber)'};font-weight:700;">(${tm.label})</span>` : ""}`;
+        const hasM = !!(x.neideti?.length || x.pakeisti?.length || x.priedai?.length || Number(x.nuolaida_proc || 0) > 0);
+        return `${x.kiekis}× ${x.pavadinimas}${_modBadgeHtml(hasM)}${tm ? ` <span style="color:${tm.sec===0?'var(--green)':'var(--amber)'};font-weight:700;">(${tm.label})</span>` : ""}`;
       }).join(', ')}</div>
       <div style="display:flex;gap:8px;width:100%;">
         <button class="btn btn-red" style="flex:1;padding:8px 6px;font-size:12px;${!isAct?'opacity:0.4;pointer-events:none;':''}" ${!isAct?'disabled':''} onclick="event.stopPropagation();askCancelOrRefund(${i},'atsaukti')">Nurašyti</button>
@@ -2161,27 +2289,130 @@ function renderReceipts() {
   }).join("") || `<div style="color:var(--muted);text-align:center;padding:24px;">Čekių istorija tuščia.</div>`;
 }
 
-function _renderReceiptModalItems(r) {
-  document.getElementById("recModalItems").innerHTML = (r.items || []).map(it => {
+let recEditModeIdx = -1;
+function _renderReceiptModalItems(r, recIdx=-1) {
+  const isEditing = (recIdx >= 0 && recEditModeIdx === recIdx && r.status === "Aktyvus" && r.paid === false);
+  document.getElementById("recModalItems").innerHTML = (r.items || []).map((it, idx) => {
     const qty = Number(it.kiekis || 1);
-    const unit = Number(it.kaina || 0);
+    const unit = calcItemUnit(it);
+    const hasM = !!(it.neideti?.length || it.pakeisti?.length || it.priedai?.length || Number(it.nuolaida_proc || 0) > 0);
+    const itemDisc = Number(it.nuolaida_proc || 0) || Number(r.nuolaida_proc || 0);
+    const discTag = itemDisc > 0 ? `<span style="color:var(--amber);font-size:11px;font-weight:800;flex-shrink:0;margin-right:5px;">-${itemDisc}%</span>` : "";
     const tmHtml = r.status === "Aktyvus" ? _getDishTimerHtml(it.pavadinimas, r.data) : "";
+    const clickAttr = isEditing
+      ? `style="flex:1;min-width:0;cursor:pointer;" onclick="openModModalForReceipt(${recIdx},${idx})"`
+      : ((hasM && recIdx >= 0) ? `style="flex:1;min-width:0;cursor:pointer;" onclick="showItemModsModal(receipts[${recIdx}].items[${idx}])"` : `style="flex:1;min-width:0;"`);
     return `<div class="cart-row" style="padding:8px 10px;">
-      <div class="row-between">
-        <div><b>${qty}× ${it.pavadinimas || ""}</b>${tmHtml}</div>
-        <b style="color:var(--amber);">${(qty * unit).toFixed(2)} €</b>
+      <div class="row-between" style="gap:8px;">
+        <div ${clickAttr}><div style="display:flex;align-items:center;min-width:0;">${discTag}<b style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isEditing ? "" : qty + "× "}${it.pavadinimas || ""}</b>${hasM ? `<span style="color:var(--amber);margin-left:5px;font-size:10px;flex-shrink:0;">●</span>` : ""}</div><span class="rec-timer-slot" data-pav="${String(it.pavadinimas||"").replace(/"/g,'&quot;')}">${tmHtml}</span></div>
+        ${isEditing ? `
+          <div class="qty-ctrl" style="flex-shrink:0;">
+            <button class="q-btn" onclick="chRecItemQty(${recIdx},${idx},-1)">−</button>
+            <b style="min-width:20px;text-align:center;font-size:13px;">${qty}</b>
+            <button class="q-btn" onclick="chRecItemQty(${recIdx},${idx},1)">+</button>
+          </div>
+          <b style="min-width:54px;text-align:right;color:var(--amber);flex-shrink:0;">${(qty * unit).toFixed(2)} €</b>
+          <button class="btn" style="padding:4px 8px;font-size:11px;color:#FCA5A5;flex-shrink:0;" onclick="rmRecItem(${recIdx},${idx})">✕</button>
+        ` : `<b style="color:var(--amber);flex-shrink:0;">${(qty * unit).toFixed(2)} €</b>`}
       </div>
     </div>`;
   }).join("") || `<div style="color:var(--muted);font-size:12px;">Pozicijų sąrašas tuščias.</div>`;
 }
 
+function chRecItemQty(recIdx, itemIdx, d) {
+  const r = receipts[recIdx];
+  const it = r && r.items && r.items[itemIdx];
+  if (!it) return;
+  it.kiekis = Math.max(1, Number(it.kiekis || 1) + d);
+  r.total = r.items.reduce((s, x) => s + Number(x.kiekis || 1) * calcItemUnit(x), 0);
+  r._dirty = true;
+  localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+  document.getElementById("recModalTotal").textContent = `${Number(r.total || 0).toFixed(2)} €`;
+  _renderReceiptModalItems(r, recIdx);
+  renderReceipts();
+}
+
+function rmRecItem(recIdx, itemIdx) {
+  const r = receipts[recIdx];
+  if (!r || !r.items) return;
+  if (r.items.length <= 1) { toast("Čekyje turi likti bent 1 pozicija (arba spauskite Grąžinti).", true); return; }
+  r.items.splice(itemIdx, 1);
+  r.total = r.items.reduce((s, x) => s + Number(x.kiekis || 1) * calcItemUnit(x), 0);
+  r._dirty = true;
+  localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+  document.getElementById("recModalTotal").textContent = `${Number(r.total || 0).toFixed(2)} €`;
+  _renderReceiptModalItems(r, recIdx);
+  renderReceipts();
+}
+
+async function saveEditedReceipt(i) {
+  const r = receipts[i];
+  if (!r || r.status !== "Aktyvus" || r.paid !== false) return;
+  const oldCekis = r.cekis;
+  const {data, laikas, timestamp} = nowParts();
+  if (r._dirty) {
+    await postWithFailover("/api/uzsakymas", {
+      veiksmas: "grazinti", cekio_nr: oldCekis,
+      priezastis: "Čekio redagavimas kasoje", data, laikas, timestamp
+    });
+    const newCekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
+    const orderDisc = Number(r.nuolaida_proc || 0);
+    const orderPromo = orderDisc > 0 ? `Čekio nuolaida -${orderDisc}%` : (r.akcija || "");
+    const res = await postWithFailover("/api/uzsakymas", {
+      cekio_nr: newCekis, data, laikas, timestamp,
+      mokejimo_budas: "neapmoketas", pastaba: r.pastaba || "", nuolaida_proc: orderDisc, akcija: orderPromo,
+      elementai: (r.items || []).map(c => {
+        const scaled = c.is_sandelis && (c.orig_vnt === "kg" || c.orig_vnt === "l");
+        return {
+          kodas: c.plu || "", pavadinimas: c.pavadinimas,
+          kiekis: scaled ? (c.kiekis / 1000.0) : c.kiekis,
+          kaina: scaled ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+          pradine_kaina: scaled ? (Number(c.kaina || 0) * 1000.0) : Number(c.kaina || 0),
+          mato_vnt: c.is_sandelis ? (c.orig_vnt || c.disp_vnt || "vnt") : undefined,
+          komentaras: r.pastaba || "", modifikacijos: buildItemMods(c),
+          nuolaida_proc: Number(c.nuolaida_proc || 0) || orderDisc,
+          akcija: c.akcija || orderPromo
+        };
+      })
+    });
+    r.cekis = newCekis;
+    r.data = timestamp;
+    r._dirty = false;
+    if (res.ok) r.via = res.channel;
+    localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
+    renderReceipts();
+    loadKDS();
+    toast(`✅ Čekis #${newCekis} atnaujintas!`);
+  }
+  recEditModeIdx = -1;
+  openReceiptModal(i);
+}
+
+function toggleReceiptEdit(i) {
+  const r = receipts[i];
+  if (r && (r.items || []).length === 1 && recEditModeIdx !== i) {
+    openModModalForReceipt(i, 0);
+    return;
+  }
+  recEditModeIdx = (recEditModeIdx === i) ? -1 : i;
+  openReceiptModal(i);
+}
+
 function openReceiptModal(i) {
   const r = receipts[i];
   if (!r) return;
-  document.getElementById("recModalTitle").textContent = `🧾 Čekis #${r.cekis}`;
+  const canEdit = (r.status === "Aktyvus" && r.paid === false);
+  const isEditing = canEdit && recEditModeIdx === i;
+  const editBtn = canEdit
+    ? (isEditing
+      ? ` <button class="btn btn-green" style="padding:3px 9px;font-size:11.5px;margin-left:8px;" onclick="saveEditedReceipt(${i})">💾 Išsaugoti</button>`
+      : ` <button class="btn" style="padding:3px 9px;font-size:11.5px;margin-left:8px;" onclick="toggleReceiptEdit(${i})">✏️ Redaguoti</button>`)
+    : "";
+  document.getElementById("recModalTitle").innerHTML = `🧾 Čekis #${r.cekis}${editBtn}`;
   const stTxt = (r.status === "Aktyvus" && r.paid === false) ? "Neapmokėtas" : (r.status || "");
-  document.getElementById("recModalMeta").textContent = `${r.data || ""} • ${stTxt}${r.stalas ? " • " + r.stalas : ""}${r.pay ? " • " + r.pay : ""}`;
-  _renderReceiptModalItems(r);
+  const ordDiscTxt = Number(r.nuolaida_proc || 0) > 0 ? ` • 🏷️ -${Number(r.nuolaida_proc)}%` : "";
+  document.getElementById("recModalMeta").textContent = `${r.data || ""} • ${stTxt}${r.stalas ? " • " + r.stalas : ""}${r.pay ? " • " + r.pay : ""}${ordDiscTxt}`;
+  _renderReceiptModalItems(r, i);
   document.getElementById("recModalTotal").textContent = `${Number(r.total || 0).toFixed(2)} €`;
   const dis = r.status !== "Aktyvus";
   const needPay = r.status === "Aktyvus" && r.paid === false;
@@ -2198,11 +2429,14 @@ function openReceiptModal(i) {
         clearInterval(window._recTimerTick);
         return;
       }
-      _renderReceiptModalItems(r);
+      document.querySelectorAll("#recModalItems .rec-timer-slot").forEach(el => {
+        el.innerHTML = _getDishTimerHtml(el.dataset.pav || "", r.data);
+      });
     }, 1000);
   }
 }
 function closeReceiptModal() {
+  recEditModeIdx = -1;
   clearInterval(window._recTimerTick);
   document.getElementById("receiptModal").classList.remove("open");
 }
@@ -2621,6 +2855,7 @@ async function pinSubmit() {
     sessionStorage.setItem("mi_waiter_pin", waiterPin);
     pinBuf = ""; updatePinDots();
     lastWaiterActivity = Date.now();
+    _setAuthUiLocked(false);
     document.getElementById("lockCornerRow").style.display = "flex";
     await loadTablesState(false);
     const rawNm = (res.user && res.user.vardas) || (waiterState && waiterState.user && waiterState.user.vardas) || "Prisijungta";
@@ -2632,12 +2867,20 @@ async function pinSubmit() {
   }
 }
 
+function _setAuthUiLocked(locked) {
+  const tb = document.querySelector(".topbar");
+  const tabs = document.querySelector(".tabs");
+  if (tb) tb.style.display = locked ? "none" : "flex";
+  if (tabs) tabs.style.display = locked ? "none" : "flex";
+}
+
 function lockWaiter() {
   waiterPin = "";
   waiterState = null;
   activeTableId = "";
   activeCheckId = "";
   sessionStorage.removeItem("mi_waiter_pin");
+  _setAuthUiLocked(true);
   document.getElementById("pinGate").style.display = "flex";
   document.getElementById("tablesWorkspace").style.display = "none";
   document.getElementById("lockCornerRow").style.display = "none";
@@ -2654,6 +2897,7 @@ async function loadTablesState(notify=false) {
   try {
     const js = await svcCall(`/api/stalai?pin=${encodeURIComponent(waiterPin)}`);
     waiterState = js;
+    _setAuthUiLocked(false);
     document.getElementById("pinGate").style.display = "none";
     document.getElementById("tablesWorkspace").style.display = "flex";
     const u = (js && js.user) || {};
@@ -2665,6 +2909,11 @@ async function loadTablesState(notify=false) {
     const wh = js.work_hours || {};
     document.getElementById("tblHoursLbl").textContent = wh.ijungta ? `🕒 ${wh.pradzia}–${wh.pabaiga}` : "🕒 Neribotas laikas";
     document.getElementById("btnMgrAdmin").style.display = (u.role === "vadybininkas") ? "inline-flex" : "none";
+    const _mgrPos = document.getElementById("btnMgrAdminPos");
+    if (_mgrPos) {
+      const inPos = document.getElementById("view-pos")?.classList.contains("active");
+      _mgrPos.style.display = (u.role === "vadybininkas" && inPos) ? "inline-flex" : "none";
+    }
 
     const ab = document.getElementById("afterHoursBanner");
     if (js.after_hours) {
@@ -2851,13 +3100,15 @@ function renderTableDetail() {
              <b style="min-width:54px;text-align:right;color:var(--amber);font-size:13px;flex-shrink:0;">${(it.kiekis * it.kaina).toFixed(2)} €</b>
              <button class="btn" style="padding:4px 8px;font-size:11px;color:#FCA5A5;flex-shrink:0;" onclick="openVoidModal('${it.item_id}','${String(it.pavadinimas).replace(/'/g,"")}')">✕</button>`
       );
+      const onClickAttr = st === "draft"
+        ? `onclick="openTableModModal('${it.item_id}', false)" title="Spauskite modifikuoti arba pritaikyti nuolaidą"`
+        : (hasMods ? `onclick="showItemModsModal((currentTableObj()?.checks?.find(c=>c.id==='${curChk.id}')?.items||[]).find(x=>x.item_id==='${it.item_id}'))"` : "");
       return `
         <div class="cart-row" style="padding:8px 10px;gap:0;${st === 'voided' ? 'opacity:0.45;text-decoration:line-through;' : ''}">
           <div class="row-between" style="gap:8px;">
-            <div style="flex:1;min-width:0;${st === 'draft' ? 'cursor:pointer;' : ''}" ${st === 'draft' ? `onclick="openTableModModal('${it.item_id}', false)" title="Spauskite modifikuoti arba pritaikyti nuolaidą"` : ''}>
-              <div style="font-weight:700;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-                <span style="color:${zm.spalva};font-weight:900;margin-right:5px;">${zm.kodas}</span>${it.pavadinimas}
-                ${hasMods ? `<span style="color:var(--amber);font-size:11px;margin-left:4px;">●</span>` : ""}
+            <div style="flex:1;min-width:0;${(st === 'draft' || hasMods) ? 'cursor:pointer;' : ''}" ${onClickAttr}>
+              <div style="font-weight:700;font-size:13px;display:flex;align-items:center;min-width:0;">
+                <span style="color:${zm.spalva};font-weight:900;margin-right:5px;flex-shrink:0;">${zm.kodas}</span><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${it.pavadinimas}</span>${_modBadgeHtml(hasMods)}
               </div>
               ${st === "sent" ? _getDishTimerHtml(it.pavadinimas, it.sent_at) : ""}
             </div>
@@ -3211,6 +3462,13 @@ function recalcPayModal() {
 }
 async function confirmPayModal() {
   const mode = payModalState.mode;
+  const givenStr = document.getElementById("pmCashGiven").value.trim();
+  const given = Number(givenStr || 0);
+  if (payModalState.cashDue > 0.001 && (!givenStr || !Number.isFinite(given) || given + 0.001 < payModalState.cashDue)) {
+    toast("⚠️ Įveskite grynųjų sumą (ne mažesnę nei mokėtina)!", true);
+    document.getElementById("pmCashGiven").focus();
+    return;
+  }
   const extra = {};
   if (mode === "Mišrus") {
     const card = Math.max(0, Number(document.getElementById("pmCardInput").value || 0));
@@ -3292,7 +3550,19 @@ function toggleMiSel(btn, ev) {
   const box = btn.closest(".mi-sel");
   const was = box.classList.contains("open");
   document.querySelectorAll(".mi-sel.open").forEach(el => el.classList.remove("open"));
-  if (!was) box.classList.add("open");
+  if (!was) {
+    const menuEl = box.querySelector(".mi-sel-menu");
+    if (menuEl) {
+      const r = btn.getBoundingClientRect();
+      menuEl.style.position = "fixed";
+      menuEl.style.left = r.left + "px";
+      menuEl.style.top = (r.bottom + 4) + "px";
+      menuEl.style.width = Math.max(r.width, 130) + "px";
+      menuEl.style.right = "auto";
+      menuEl.style.maxHeight = Math.max(120, Math.min(320, window.innerHeight - r.bottom - 16)) + "px";
+    }
+    box.classList.add("open");
+  }
 }
 function pickMiSel(opt, val, ev) {
   ev.stopPropagation();
