@@ -2003,18 +2003,8 @@ async function saveModModal() {
       it.pakeisti = modDraft.pakeisti;
       it.priedai = modDraft.priedai;
       const newProc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
-      const oldProc = Number(it.nuolaida_proc || 0);
       it.nuolaida_proc = newProc;
       it.akcija = newProc > 0 ? (document.getElementById("inpItemPromo").value.trim() || `Akcija -${newProc}%`) : "";
-      if (newProc !== oldProc || newProc === 0) {
-        const mIt = menu.find(m => m.pavadinimas === it.pavadinimas);
-        if (mIt) {
-          mIt.akcija_proc = newProc;
-          localStorage.setItem("mi_app_menu", JSON.stringify(menu));
-        }
-        postWithFailover("/api/akcija", {pavadinimas: it.pavadinimas, nuolaida_proc: newProc}).catch(() => {});
-        renderMenu();
-      }
       r.total = (r.items || []).reduce((s, x) => s + Number(x.kiekis || 1) * calcItemUnit(x), 0);
       r._dirty = true;
       localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
@@ -2056,18 +2046,8 @@ async function saveModModal() {
   c.pakeisti = modDraft.pakeisti;
   c.priedai = modDraft.priedai;
   const newProc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
-  const oldProc = Number(c.nuolaida_proc || 0);
   c.nuolaida_proc = newProc;
   c.akcija = newProc > 0 ? (document.getElementById("inpItemPromo").value.trim() || `Akcija -${newProc}%`) : "";
-  if (newProc !== oldProc || newProc === 0) {
-    const mIt = menu.find(m => m.pavadinimas === c.pavadinimas);
-    if (mIt) {
-      mIt.akcija_proc = newProc;
-      localStorage.setItem("mi_app_menu", JSON.stringify(menu));
-    }
-    postWithFailover("/api/akcija", {pavadinimas: c.pavadinimas, nuolaida_proc: newProc}).catch(() => {});
-    renderMenu();
-  }
   closeModModal(); renderCart();
 }
 
