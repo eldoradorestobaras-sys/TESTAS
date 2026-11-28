@@ -1508,7 +1508,7 @@ async function sendPosToKitchen() {
       return;
     }
   }
-  const cekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
+  const cekis = Math.floor(100000 + Math.random() * 899999);
   const {data, laikas, timestamp} = nowParts();
   const orderPromo = orderDisc > 0 ? `Čekio nuolaida -${orderDisc}%` : "";
   const payload = {
@@ -2003,8 +2003,18 @@ async function saveModModal() {
       it.pakeisti = modDraft.pakeisti;
       it.priedai = modDraft.priedai;
       const newProc = Math.max(0, Math.min(100, Number(document.getElementById("inpItemDisc").value || 0)));
+      const oldProc = Number(it.nuolaida_proc || 0);
       it.nuolaida_proc = newProc;
       it.akcija = newProc > 0 ? (document.getElementById("inpItemPromo").value.trim() || `Akcija -${newProc}%`) : "";
+      if (newProc !== oldProc || newProc === 0) {
+        const mIt = menu.find(m => m.pavadinimas === it.pavadinimas);
+        if (mIt) {
+          mIt.akcija_proc = newProc;
+          localStorage.setItem("mi_app_menu", JSON.stringify(menu));
+        }
+        postWithFailover("/api/akcija", {pavadinimas: it.pavadinimas, nuolaida_proc: newProc}).catch(() => {});
+        renderMenu();
+      }
       r.total = (r.items || []).reduce((s, x) => s + Number(x.kiekis || 1) * calcItemUnit(x), 0);
       r._dirty = true;
       localStorage.setItem("mi_app_rec", JSON.stringify(receipts));
@@ -2049,7 +2059,7 @@ async function saveModModal() {
   const oldProc = Number(c.nuolaida_proc || 0);
   c.nuolaida_proc = newProc;
   c.akcija = newProc > 0 ? (document.getElementById("inpItemPromo").value.trim() || `Akcija -${newProc}%`) : "";
-  if (newProc !== oldProc) {
+  if (newProc !== oldProc || newProc === 0) {
     const mIt = menu.find(m => m.pavadinimas === c.pavadinimas);
     if (mIt) {
       mIt.akcija_proc = newProc;
@@ -2101,7 +2111,7 @@ async function sendOrder(pay, extra={}) {
     toast("🌙 " + (waiterState.after_hours_msg || "Darbo laikas baigėsi — užsakymų siųsti negalima."), true);
     return;
   }
-  const cekis = Math.floor(5100 + Math.random() * 4800) + (Date.now() % 100);
+  const cekis = Math.floor(100000 + Math.random() * 899999);
   const {data, laikas, timestamp} = nowParts();
   const note = document.getElementById("inpNote").value.trim();
   const orderDisc = Number(document.getElementById("inpOrderDisc").value || 0);
@@ -2455,7 +2465,7 @@ async function syncRemoteData(notify=false) {
       const ms = (u === cloud) ? 15000 : 3000;
       const [rm, rs] = await Promise.all([
         fetchTimeout(u + "/api/meniu?source=model_mi", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, ms),
-        fetchTimeout(u + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, 2500).catch(() => null)
+        fetchTimeout(u + "/api/sandelis", {headers: cfg.apiKey ? {"X-API-Key": cfg.apiKey} : {}}, ms).catch(() => null)
       ]);
       if (rm.ok && !gotMenu) {
         const js = await rm.json();
